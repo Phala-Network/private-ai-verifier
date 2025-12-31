@@ -1,0 +1,23 @@
+{
+	"name": "confidential-service-verifier",
+	"module": "index.ts",
+	"type": "module",
+	"private": true,
+	"scripts": {
+		"dev": "bun --watch run src/index.ts",
+		"start": "bun run src/index.ts",
+		"config:tinfoil": "mkdir -p src/config && curl -o src/config/tinfoil_config.yml https://raw.githubusercontent.com/tinfoilsh/confidential-pollux-router/main/config.yml"
+	},
+	"devDependencies": {
+		"@types/bun": "latest",
+		"@types/js-yaml": "^4.0.9"
+	},
+	"peerDependencies": {
+		"typescript": "^5"
+	},
+	"dependencies": {
+		"axios": "^1.13.2",
+		"dotenv": "^17.2.3",
+		"js-yaml": "^4.1.1"
+	}
+}
