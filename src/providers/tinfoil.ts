@@ -18,6 +18,7 @@ export class TinfoilProvider implements ServiceProvider {
 
 		try {
 			const fileContent = await fs.readFile(this.configPath, "utf-8");
+			// biome-ignore lint/suspicious/noExplicitAny: YAML config is dynamic
 			const config = yaml.load(fileContent) as any;
 
 			const map: Record<string, string> = {};
@@ -28,6 +29,7 @@ export class TinfoilProvider implements ServiceProvider {
 
 			if (config.models) {
 				for (const [key, value] of Object.entries(config.models)) {
+					// biome-ignore lint/suspicious/noExplicitAny: YAML config is dynamic
 					const modelData = value as any;
 					if (
 						modelData.enclaves &&
@@ -64,6 +66,13 @@ export class TinfoilProvider implements ServiceProvider {
 
 		const response = await axios.get(url);
 		const data = response.data;
+		const expectedPrefix = "https://tinfoil.sh/predicate/tdx-guest/";
+
+		if (!data.format || !data.format.startsWith(expectedPrefix)) {
+			throw new Error(
+				`Unsupported Tinfoil attestation format: ${data.format || "missing"}`,
+			);
+		}
 
 		if (!data.body) {
 			throw new Error("Tinfoil response missing body");

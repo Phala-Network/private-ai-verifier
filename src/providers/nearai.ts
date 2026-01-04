@@ -52,6 +52,7 @@ export class NearaiProvider implements ServiceProvider {
 		// Assuming data is array or wrapped array
 		const models = Array.isArray(data) ? data : data.models || [];
 		// Extract 'id' if objects, or return strings if strings
+		// biome-ignore lint/suspicious/noExplicitAny: API response is dynamic
 		return models.map((m: any) => (typeof m === "string" ? m : m.modelId));
 	}
 }

@@ -30,6 +30,7 @@ export class RedpillProvider implements ServiceProvider {
 		const data = response.data;
 		const models = Array.isArray(data) ? data : data.data || [];
 
+		// biome-ignore lint/suspicious/noExplicitAny: API response is dynamic
 		return models.map((m: any) => m.id);
 	}
 }
