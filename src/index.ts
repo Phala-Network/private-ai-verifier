@@ -1,7 +1,8 @@
 import { RedpillProvider } from "./providers/redpill";
 import { NearaiProvider } from "./providers/nearai";
 import { TinfoilProvider } from "./providers/tinfoil";
-import type { ServiceProvider } from "./types";
+import type { ServiceProvider, AttestationReport } from "./types";
+import { VerificationManager } from "./verification/index";
 
 const providers: Record<string, ServiceProvider> = {
 	redpill: new RedpillProvider(),
@@ -9,12 +10,15 @@ const providers: Record<string, ServiceProvider> = {
 	tinfoil: new TinfoilProvider(),
 };
 
+const verificationManager = new VerificationManager();
+
 const server = Bun.serve({
 	port: 3000,
 	async fetch(req) {
 		const url = new URL(req.url);
 
-		if (url.pathname === "/verify") {
+		// GET /report - Fetch the attestation report
+		if (url.pathname === "/report") {
 			const service = url.searchParams.get("service");
 			const model = url.searchParams.get("model");
 
@@ -37,9 +41,34 @@ const server = Bun.serve({
 				return Response.json(report, {
 					headers: { "Content-Type": "application/json" },
 				});
-			} catch (err: any) {
+			} catch (err: unknown) {
+				const errorMessage = err instanceof Error ? err.message : String(err);
 				console.error(`Error processing ${service}/${model}:`, err);
-				return new Response(`Error: ${err.message}`, { status: 500 });
+				return new Response(`Error: ${errorMessage}`, { status: 500 });
+			}
+		}
+
+		// POST /verify - Verify an attestation report
+		if (url.pathname === "/verify" && req.method === "POST") {
+			try {
+				const body = await req.json();
+				// Basic validation that it looks like a report (has intel_quote or nvidia_payload)
+				// VerificationManager handles missing fields gracefully by returning INVALID/UNKNOWN,
+				// so we can pass it directly.
+				if (!body || typeof body !== "object") {
+					return new Response("Invalid request body", { status: 400 });
+				}
+
+				const result = await verificationManager.verifyReport(
+					body as AttestationReport,
+				);
+				return Response.json(result, {
+					headers: { "Content-Type": "application/json" },
+				});
+			} catch (err: unknown) {
+				const errorMessage = err instanceof Error ? err.message : String(err);
+				console.error("Error verifying report:", err);
+				return new Response(`Error: ${errorMessage}`, { status: 400 });
 			}
 		}
 
@@ -68,14 +97,15 @@ const server = Bun.serve({
 				return Response.json(models, {
 					headers: { "Content-Type": "application/json" },
 				});
-			} catch (err: any) {
+			} catch (err: unknown) {
+				const errorMessage = err instanceof Error ? err.message : String(err);
 				console.error(`Error fetching models for ${service}:`, err);
-				return new Response(`Error: ${err.message}`, { status: 500 });
+				return new Response(`Error: ${errorMessage}`, { status: 500 });
 			}
 		}
 
 		return new Response(
-			"Confidential Service Verifier API\nUsage: GET /verify?service=<name>&model=<id>",
+			"Confidential Service Verifier API\nUsage:\n  GET /report?service=<name>&model=<id> -> Fetch Report\n  POST /verify -> Verify Report JSON",
 			{ status: 200 },
 		);
 	},

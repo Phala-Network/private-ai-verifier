@@ -55,14 +55,15 @@ Get a list of available models for a specific service provider.
 
   ```bash
   curl "http://localhost:3000/models?service=redpill"
+  curl "http://localhost:3000/models?service=nearai"
   curl "http://localhost:3000/models?service=tinfoil"
   ```
 
-### 3. Verify Attestation
+### 3. Fetch Attestation Report
 
-Fetch the attestation report for a specific model.
+Fetch the raw attestation report for a specific model.
 
-- **Endpoint**: `GET /verify`
+- **Endpoint**: `GET /report`
 - **Query Params**:
   - `service`: `redpill`, `nearai`, or `tinfoil`
   - `model`: Model ID (e.g., `openai/gpt-oss-120b`)
@@ -71,14 +72,64 @@ Fetch the attestation report for a specific model.
 
 ```bash
 # Redpill
-curl "http://localhost:3000/verify?service=redpill&model=openai/gpt-oss-120b"
+curl "http://localhost:3000/report?service=redpill&model=openai/gpt-oss-120b"
 
 # Near AI
-curl "http://localhost:3000/verify?service=nearai&model=deepseek-ai/DeepSeek-V3.1"
+curl "http://localhost:3000/report?service=nearai&model=deepseek-ai/DeepSeek-V3.1"
 
 # Tinfoil
-curl "http://localhost:3000/verify?service=tinfoil&model=gpt-oss-120b"
+curl "http://localhost:3000/report?service=tinfoil&model=gpt-oss-120b"
 ```
+
+### 4. Verify Attestation Report
+
+Verify the validity of a fetched attestation report. The Intel TDX quote is mandatory; the Nvidia GPU payload is optional.
+
+- **Endpoint**: `POST /verify`
+- **Body**: The JSON attestation report object (obtained from `/report` or compatible source).
+- **Response**: A standardized object containing a mandatory `intel` field and an optional `nvidia` field.
+
+**Example**:
+
+```bash
+# 1. Fetch report and save to file
+curl "http://localhost:3000/report?service=redpill&model=openai/gpt-oss-120b" > report.json
+
+# 2. Verify the report
+curl -X POST -H "Content-Type: application/json" -d @report.json http://localhost:3000/verify
+```
+
+**Standardized Response Format**:
+
+The result maintains independence between CPU and GPU verification results:
+
+```json
+{
+  "intel": {
+    "isValid": true,
+    "timestamp": 1767507476806,
+    "hardwareType": "INTEL_TDX",
+    "claims": {
+        "mrTd": "...",
+        "rtMr0": "...",
+        "reportData": "..."
+    },
+    "raw": { ... }
+  },
+  "nvidia": {
+    "isValid": true,
+    "timestamp": 1767507477198,
+    "hardwareType": "NVIDIA_CC",
+    "claims": {
+        "x-nvidia-overall-att-result": true,
+        "ueid": "..."
+    },
+    "raw": [ ... ]
+  }
+}
+```
+
+If only Intel is present or verified, the `nvidia` field will be absent. If `intel_quote` is missing from the request, the `intel` object will contain an error status.
 
 ## Attestation Collection Mechanism
 

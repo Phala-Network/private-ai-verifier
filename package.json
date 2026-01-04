@@ -16,6 +16,7 @@
 		"typescript": "^5"
 	},
 	"dependencies": {
+		"@phala/dcap-qvl": "^0.3.0",
 		"axios": "^1.13.2",
 		"dotenv": "^17.2.3",
 		"js-yaml": "^4.1.1"
