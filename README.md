@@ -193,3 +193,4 @@ If only Intel is present or verified, the `nvidia` field will be absent. If `int
 - **Verification details**:
   - The `body` must be Base64-decoded and then Gunzipped to get the raw **Intel TDX Quote**.
   - **GPU Verification**: Tinfoil does not expose a separate Nvidia report. The Enclave code (verified by the TDX Quote) is responsible for local GPU verification.
+  - **Predicate Documentation**: More details about the Tinfoil attestation format can be found at [https://docs.tinfoil.sh/verification/predicate](https://docs.tinfoil.sh/verification/predicate).

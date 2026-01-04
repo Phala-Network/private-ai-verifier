@@ -6,7 +6,7 @@
 	"scripts": {
 		"dev": "bun --watch run src/index.ts",
 		"start": "bun run src/index.ts",
-		"config:tinfoil": "mkdir -p src/config && curl -o src/config/tinfoil_config.yml https://raw.githubusercontent.com/tinfoilsh/confidential-pollux-router/main/config.yml"
+		"config:tinfoil": "mkdir -p src/config && curl -o src/config/tinfoil_config.yml https://raw.githubusercontent.com/tinfoilsh/confidential-model-router/refs/heads/main/config.yml"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
