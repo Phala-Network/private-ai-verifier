@@ -1,196 +1,88 @@
-# Private AI Verifier
+# Confidential Service Verifier Python SDK
 
-A unified API to fetch and verify attestation reports from various private AI providers (Redpill, Near AI, Tinfoil).
+A pure Python SDK for fetching and verifying TEE (Trusted Execution Environment) hardware attestation reports from various providers like Tinfoil, Redpill, and Near AI. Supports both Intel TDX and Nvidia CC (Confidential Computing) GPU attestation.
 
-## Setup
+## Features
 
-1.  **Install dependencies**:
+- **Multi-Provider Support**: Fetch reports from Tinfoil, Redpill, and Near AI.
+- **Hardware Verification**:
+  - **Intel TDX**: Using the `dcap-qvl` Python package.
+  - **Nvidia CC**: Using Nvidia's NRAS (Nvidia Remote Attestation Service).
+- **Clear Verification Levels**: Easily distinguish between failed, TDX-only, and TDX + GPU successful attestations.
+- **`uv` Ready**: Managed with `uv` for modern, fast Python dependency management.
+- **Built-in Server**: Includes a FastAPI server for testing and easy integration.
 
-    ```bash
-    bun install
-    ```
+## Installation
 
-2.  **Setup Tinfoil Configuration**:
-
-    You must download the Tinfoil configuration file before running the server.
-
-    ```bash
-    bun run config:tinfoil
-    ```
-
-3.  **Start the server**:
-
-    ```bash
-    bun start
-    ```
-
-    For development with auto-reload:
-
-    ```bash
-    bun dev
-    ```
-
-    The server listens on `http://localhost:3000`.
-
-## API Endpoints
-
-### 1. List Providers
-
-Get a list of supported service providers.
-
-- **Endpoint**: `GET /providers`
-- **Example**:
-
-  ```bash
-  curl http://localhost:3000/providers
-  # Output: ["redpill", "nearai", "tinfoil"]
-  ```
-
-### 2. List Models
-
-Get a list of available models for a specific service provider.
-
-- **Endpoint**: `GET /models?service=<provider_name>`
-- **Example**:
-
-  ```bash
-  curl "http://localhost:3000/models?service=redpill"
-  curl "http://localhost:3000/models?service=nearai"
-  curl "http://localhost:3000/models?service=tinfoil"
-  ```
-
-### 3. Fetch Attestation Report
-
-Fetch the raw attestation report for a specific model.
-
-- **Endpoint**: `GET /report`
-- **Query Params**:
-  - `service`: `redpill`, `nearai`, or `tinfoil`
-  - `model`: Model ID (e.g., `openai/gpt-oss-120b`)
-
-**Examples**:
+Ensure you have `uv` installed. Then:
 
 ```bash
-# Redpill
-curl "http://localhost:3000/report?service=redpill&model=openai/gpt-oss-120b"
-
-# Near AI
-curl "http://localhost:3000/report?service=nearai&model=deepseek-ai/DeepSeek-V3.1"
-
-# Tinfoil
-curl "http://localhost:3000/report?service=tinfoil&model=gpt-oss-120b"
+cd python-sdk
+uv sync
 ```
 
-### 4. Verify Attestation Report
+## SDK Usage
 
-Verify the validity of a fetched attestation report. The Intel TDX quote is mandatory; the Nvidia GPU payload is optional.
+The SDK provides a clean API with separate `fetch_report()` and `verify()` steps.
 
-- **Endpoint**: `POST /verify`
-- **Body**: The JSON attestation report object (obtained from `/report` or compatible source).
-- **Response**: A standardized object containing a mandatory `intel` field and an optional `nvidia` field.
+```python
+import asyncio
+from confidential_verifier import TeeVerifier
 
-**Example**:
+async def main():
+    verifier = TeeVerifier()
+
+    # 1. Fetch a report from a provider
+    report = await verifier.fetch_report("redpill", "meta-llama/Llama-3.3-70B-Instruct")
+
+    # 2. Verify the report
+    result = await verifier.verify(report)
+
+    print(f"Verification Level: {result.level}")
+    if result.level == "HARDWARE_TDX_CC":
+        print("Success: Both TDX and Nvidia CC are verified!")
+    elif result.level == "HARDWARE_TDX":
+        print("Success: TDX verified (no GPU or GPU verification failed).")
+    else:
+        print(f"Failed: {result.error}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Verification Levels
+
+- `NONE`: Verification failed.
+- `HARDWARE_TDX`: Intel TDX hardware verification passed.
+- `HARDWARE_TDX_CC`: Both Intel TDX and Nvidia CC (GPU) hardware verification passed.
+
+## API Server
+
+The SDK includes a FastAPI server that mirrors the functionality of the original TypeScript version.
+
+### Run the Server
 
 ```bash
-# 1. Fetch report and save to file
-curl "http://localhost:3000/report?service=redpill&model=openai/gpt-oss-120b" > report.json
-
-# 2. Verify the report
-curl -X POST -H "Content-Type: application/json" -d @report.json http://localhost:3000/verify
+PYTHONPATH=. uv run python server/main.py
 ```
 
-**Standardized Response Format**:
+The server will be available at `http://0.0.0.0:8000`.
 
-The result maintains independence between CPU and GPU verification results:
+### Endpoints
 
-```json
-{
-  "intel": {
-    "isValid": true,
-    "timestamp": 1767507476806,
-    "hardwareType": "INTEL_TDX",
-    "claims": {
-        "mrTd": "...",
-        "rtMr0": "...",
-        "reportData": "..."
-    },
-    "raw": { ... }
-  },
-  "nvidia": {
-    "isValid": true,
-    "timestamp": 1767507477198,
-    "hardwareType": "NVIDIA_CC",
-    "claims": {
-        "x-nvidia-overall-att-result": true,
-        "ueid": "..."
-    },
-    "raw": [ ... ]
-  }
-}
+- `GET /providers`: List available TEE providers.
+- `GET /models?provider=<name>`: List supported models for a provider.
+- `GET /fetch-report?provider=<name>&model_id=<id>`: Fetch an attestation report.
+- `POST /verify`: Verify a JSON-encoded `AttestationReport`.
+
+## Testing
+
+Run the included test suite to verify the SDK against hardcoded test data:
+
+```bash
+PYTHONPATH=. uv run python -m tests.test_sdk
 ```
 
-If only Intel is present or verified, the `nvidia` field will be absent. If `intel_quote` is missing from the request, the `intel` object will contain an error status.
+## Configuration
 
-## Attestation Collection Mechanism
-
-### 1. Redpill
-
-- **Request**:
-
-  ```http
-  GET https://api.redpill.ai/v1/attestation/report?model={model_id}
-  ```
-
-- **Response Sample**:
-  ```json
-  {
-    "intel_quote": "04000200...",
-    "nvidia_payload": "{\"nonce\": \"...\", ...}",
-    "metadata": { ... }
-  }
-  ```
-
-### 2. Near AI
-
-- **Request**:
-
-  ```http
-  GET https://cloud-api.near.ai/v1/attestation/report?model={model_id}&nonce={nonce}&signing_algo=ecdsa
-  ```
-
-- **Response Sample**:
-  ```json
-  {
-    "model_attestations": [
-      {
-        "signing_address": "0x123...",
-        "intel_quote": "04000200...",
-        "nvidia_payload": "..."
-      }
-    ]
-  }
-  ```
-
-### 3. Tinfoil
-
-- **Request**:
-
-  ```http
-  GET https://{enclave-host}/.well-known/tinfoil-attestation
-  ```
-
-  _(Note: Hostname is determined by the model, e.g., `gpt-oss-120b.inf5.tinfoil.sh`)_
-
-- **Response Sample**:
-
-  ```json
-  {
-    "format": "https://tinfoil.sh/predicate/tdx-guest/v2",
-    "body": "H4sIAAAAAAAA..." // Base64 encoded Gzipped data
-  }
-  ```
-
-- **Verification details**:
-  - The `body` must be Base64-decoded and then Gunzipped to get the raw **Intel TDX Quote**.
-  - **GPU Verification**: Tinfoil does not expose a separate Nvidia report. The Enclave code (verified by the TDX Quote) is responsible for local GPU verification.
-  - **Predicate Documentation**: More details about the Tinfoil attestation format can be found at [https://docs.tinfoil.sh/verification/predicate](https://docs.tinfoil.sh/verification/predicate).
+For **Tinfoil**, you may need to download the enclave configuration. The SDK looks for `tinfoil_config.yml` in the `python-sdk/config/` or the root `src/config/` directory.
