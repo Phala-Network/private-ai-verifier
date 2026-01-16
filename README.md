@@ -12,6 +12,10 @@ A pure Python SDK for fetching and verifying TEE (Trusted Execution Environment)
 - **`uv` Ready**: Managed with `uv` for modern, fast Python dependency management.
 - **Built-in Server**: Includes a FastAPI server for testing and easy integration.
 
+## Documentation
+
+- [Tinfoil Verification Details](docs/tinfoil_verification.md): Explains hardware policy checks and automated Sigstore manifest comparison.
+
 ## Installation
 
 Ensure you have `uv` installed. Then:

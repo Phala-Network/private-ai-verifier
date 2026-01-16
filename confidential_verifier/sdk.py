@@ -2,7 +2,7 @@ import time
 from typing import Optional, Dict, Any, List
 from .types import AttestationReport, VerificationResult, VerificationLevel
 from .providers import TinfoilProvider, RedpillProvider, NearaiProvider
-from .verifiers import IntelTdxVerifier, NvidiaGpuVerifier
+from .verifiers import NvidiaGpuVerifier
 
 
 class TeeVerifier:
@@ -12,7 +12,6 @@ class TeeVerifier:
             "redpill": RedpillProvider(),
             "nearai": NearaiProvider(),
         }
-        self.intel_verifier = IntelTdxVerifier()
         self.nvidia_verifier = NvidiaGpuVerifier()
 
     async def fetch_report(
@@ -24,8 +23,30 @@ class TeeVerifier:
         return provider.fetch_report(model_id)
 
     async def verify(self, report: AttestationReport) -> VerificationResult:
+        # Get provider from report
+        provider_name = report.provider.lower()
+        provider = self.providers.get(provider_name)
+        if not provider:
+            # Fallback for reports that might have been saved before this change
+            # or from other sources. Use a default IntelTdxVerifier which does
+            # trivial verification (no policy).
+            from .verifiers import IntelTdxVerifier
+
+            intel_verifier = IntelTdxVerifier()
+        else:
+            intel_verifier = provider.get_verifier()
+
+        # Wrap quote with metadata if available in raw
+        quote_input = report.intel_quote
+        if isinstance(report.raw, dict):
+            quote_input = {
+                "quote": report.intel_quote,
+                "model_id": report.raw.get("model_id"),
+                "repo": report.raw.get("repo"),
+            }
+
         # 1. Verify Intel TDX Quote (Mandatory)
-        intel_result = await self.intel_verifier.verify(report.intel_quote)
+        intel_result = await intel_verifier.verify(quote_input)
 
         if intel_result.level == VerificationLevel.NONE:
             return intel_result

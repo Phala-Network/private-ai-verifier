@@ -11,9 +11,11 @@ async def test_verifiers():
     verifier = TeeVerifier()
 
     print("\n--- Testing Intel TDX Verification ---")
-    # Note: This might fail if collateral cannot be fetched or quote is expired
-    # but we are testing the integration.
-    intel_result = await verifier.intel_verifier.verify(INTEL_QUOTE_HEX)
+    print("\n--- Testing Intel TDX Verification ---")
+    # Use default/generic IntelTdxVerifier directly
+    from confidential_verifier.verifiers import IntelTdxVerifier
+
+    intel_result = await IntelTdxVerifier().verify(INTEL_QUOTE_HEX)
     print(f"Level: {intel_result.level}")
     print(f"Error: {intel_result.error}")
     # print(f"Claims: {json.dumps(intel_result.claims, indent=2)}")
@@ -26,8 +28,9 @@ async def test_verifiers():
     # print(f"Claims: {json.dumps(nvidia_result.claims, indent=2)}")
 
     print("\n--- Testing Combined Verification ---")
+    # Use "generic" or unknown provider to test fallback to IntelTdxVerifier
     report = AttestationReport(
-        intel_quote=INTEL_QUOTE_HEX, nvidia_payload=NVIDIA_PAYLOAD
+        provider="generic", intel_quote=INTEL_QUOTE_HEX, nvidia_payload=NVIDIA_PAYLOAD
     )
     combined_result = await verifier.verify(report)
     print(f"Overall Level: {combined_result.level}")
