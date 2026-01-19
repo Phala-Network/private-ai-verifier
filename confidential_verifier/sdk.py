@@ -2,7 +2,7 @@ import time
 from typing import Optional, Dict, Any, List
 from .types import AttestationReport, VerificationResult, VerificationLevel
 from .providers import TinfoilProvider, RedpillProvider, NearaiProvider
-from .verifiers import NvidiaGpuVerifier
+from .verifiers import NvidiaGpuVerifier, PhalaCloudVerifier
 
 
 class TeeVerifier:

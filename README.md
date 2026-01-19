@@ -9,12 +9,15 @@ A pure Python SDK for fetching and verifying TEE (Trusted Execution Environment)
   - **Intel TDX**: Using the `dcap-qvl` Python package.
   - **Nvidia CC**: Using Nvidia's NRAS (Nvidia Remote Attestation Service).
 - **Clear Verification Levels**: Easily distinguish between failed, TDX-only, and TDX + GPU successful attestations.
+- **Phala Cloud Verification**: Verify Redpill models running as dstack apps on Phala Cloud.
 - **`uv` Ready**: Managed with `uv` for modern, fast Python dependency management.
+- **Docker Support**: Built-in support for `dstack-verifier` service via Docker.
 - **Built-in Server**: Includes a FastAPI server for testing and easy integration.
 
 ## Documentation
 
 - [Tinfoil Verification Details](docs/tinfoil_verification.md): Explains hardware policy checks and automated Sigstore manifest comparison.
+- [Redpill Verification Details](docs/redpill_verification.md): Explains the verification chain for Phala Cloud apps.
 
 ## Installation
 
@@ -54,11 +57,41 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### Verification Levels
+### Phala Cloud / Redpill Usage
+
+To verify a Redpill App by its ID (which verifies the dstack container and optional GPU), you use the `PhalaCloudVerifier` directly:
+
+```python
+import asyncio
+from confidential_verifier.verifiers import PhalaCloudVerifier
+
+async def main():
+    # Verify a Redpill specific App ID
+    # Requires dstack-verifier service running (see Deployment)
+    verifier = PhalaCloudVerifier("0c92fd1f89abe33ab0c4ac7f86856f79217e9038")
+    result = await verifier.verify()
+    print(f"Is valid: {result.level != 'NONE'}")
+    print(f"Level: {result.level}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
 
 - `NONE`: Verification failed.
 - `HARDWARE_TDX`: Intel TDX hardware verification passed.
 - `HARDWARE_TDX_CC`: Both Intel TDX and Nvidia CC (GPU) hardware verification passed.
+
+## Deployment
+
+### DStack Verifier Service
+
+For Phala Cloud verification, the SDK requires the `dstack-verifier` service to be running. You can start it using Docker:
+
+```bash
+docker compose up -d
+```
+
+This will start the `dstacktee/dstack-verifier` image on `http://localhost:8080`, which the SDK uses by default.
 
 ## API Server
 
