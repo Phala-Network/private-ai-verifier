@@ -1,6 +1,7 @@
 import pytest
 import asyncio
-from confidential_verifier.verifiers import PhalaCloudVerifier
+# PhalaCloudVerifier is internal - import directly from module
+from confidential_verifier.verifiers.phala import PhalaCloudVerifier
 
 
 @pytest.mark.asyncio

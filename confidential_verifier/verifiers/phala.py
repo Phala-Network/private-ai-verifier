@@ -2,7 +2,7 @@ import logging
 import requests
 import json
 import time
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 import hashlib
 from urllib.parse import urlparse
 from ..types import VerificationResult
@@ -15,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 class PhalaCloudVerifier(Verifier):
     """
-    Verifier for Phala Cloud Apps (Redpill models).
-    Verifies:
-    1. The dstack TEE environment (using dstack-verifier).
-    2. The Nvidia GPU payload (if applicable).
+    Internal verifier for Phala Cloud Apps.
+    Verifies dstack TEE environment (App/KMS/Gateway components) and optionally GPU.
+
+    This is an internal class used by RedpillVerifier. Users should call
+    RedpillVerifier directly for Redpill model verification.
     """
 
     def __init__(
@@ -30,7 +31,6 @@ class PhalaCloudVerifier(Verifier):
         self.dstack_verifier = DstackVerifier(service_url=dstack_verifier_url)
         self.nvidia_verifier = NvidiaGpuVerifier()
         self.system_info: Optional[Dict[str, Any]] = None
-        self.model_info: Optional[Dict[str, Any]] = None
 
     @staticmethod
     def get_system_info(app_id: str) -> Dict[str, Any]:
@@ -46,19 +46,6 @@ class PhalaCloudVerifier(Verifier):
                 f"Failed to fetch system info from Phala Cloud for app {app_id}: {e}"
             )
             raise
-
-    @staticmethod
-    def get_redpill_models() -> List[Dict[str, Any]]:
-        """Fetches running models from Redpill API."""
-        url = "https://api.redpill.ai/v1/models"
-        try:
-            response = requests.get(url)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("data", [])
-        except Exception as e:
-            logger.warn(f"Failed to fetch Redpill models: {e}")
-            return []
 
     def _verify_component(
         self,
@@ -105,7 +92,9 @@ class PhalaCloudVerifier(Verifier):
         }
 
     async def verify(
-        self, system_info: Optional[Dict[str, Any]] = None
+        self,
+        system_info: Optional[Dict[str, Any]] = None,
+        nvidia_payload: Optional[Dict[str, Any]] = None,
     ) -> VerificationResult:
         try:
             # 1. Fetch System Info (if not provided)
@@ -226,8 +215,10 @@ class PhalaCloudVerifier(Verifier):
                     all_valid = False
                     error_msgs.append(f"{c['name']} failed: {res.get('reason')}")
 
-            # 4. Verify Nvidia GPU (if applicable, only for main app)
-            gpu_result = await self._verify_gpu()
+            # 4. Verify Nvidia GPU (if payload provided)
+            gpu_result = None
+            if nvidia_payload:
+                gpu_result = await self.nvidia_verifier.verify(nvidia_payload)
 
             # 5. Determine level and error message
             model_verified = all_valid
@@ -241,10 +232,6 @@ class PhalaCloudVerifier(Verifier):
                         error_msgs.append(
                             f"GPU verification failed: {gpu_result.error}"
                         )
-                elif self.model_info:
-                    error_msgs.append(
-                        "GPU verification skipped (no attestation report found)"
-                    )
             else:
                 if not error_msgs:
                     error_msgs.append("One or more components failed verification")
@@ -285,60 +272,3 @@ class PhalaCloudVerifier(Verifier):
                 error=str(e),
             )
 
-    async def _verify_gpu(self) -> Optional[VerificationResult]:
-        """Checks for GPU model match and attests if found."""
-        try:
-            models = self.get_redpill_models()
-            self.model_info = next(
-                (
-                    m
-                    for m in models
-                    if m.get("metadata", {}).get("appid") == self.app_id
-                ),
-                None,
-            )
-
-            if not self.model_info:
-                logger.info(
-                    f"No matching Redpill model found for App ID {self.app_id}. Skipping GPU verification."
-                )
-                return None
-
-            logger.info(f"Found matching Redpill model: {self.model_info.get('id')}")
-
-            # Fetch attestation from Redpill API
-            attestation_url = f"https://api.redpill.ai/v1/attestation/report?model={self.model_info['id']}"
-            resp = requests.get(
-                attestation_url, headers={"Authorization": "Bearer test"}
-            )
-
-            if not resp.ok:
-                logger.warn(
-                    f"Failed to get attestation report from Redpill: {resp.status_code}"
-                )
-                return None
-
-            report_data = resp.json()
-            nvidia_payload = report_data.get("nvidia_payload")
-
-            if not nvidia_payload:
-                logger.warn("Redpill attestation report missing nvidia_payload")
-                return None
-
-            if isinstance(nvidia_payload, str):
-                try:
-                    nvidia_payload = json.loads(nvidia_payload)
-                except Exception as e:
-                    logger.warn(f"Failed to parse nvidia_payload string as JSON: {e}")
-
-            return await self.nvidia_verifier.verify(nvidia_payload)
-
-        except Exception as e:
-            logger.error(f"Error during GPU verification: {e}")
-            return VerificationResult(
-                model_verified=False,
-                timestamp=time.time(),
-                hardware_type=["NVIDIA_CC"],
-                claims={},
-                error=str(e),
-            )

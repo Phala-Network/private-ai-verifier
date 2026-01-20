@@ -1,12 +1,19 @@
 import requests
 import secrets
-from typing import List, Dict, Any
+import json
+from typing import List
 from .base import ServiceProvider
 from ..types import AttestationReport
-from ..verifiers import Verifier, RedpillVerifier
 
 
 class RedpillProvider(ServiceProvider):
+    """
+    Provider for Redpill AI models.
+
+    Redpill models are Phala Cloud apps. The SDK handles verification
+    specially using RedpillVerifier which uses PhalaCloudVerifier internally.
+    """
+
     def __init__(self):
         self.api_base = "https://api.redpill.ai/v1"
 
@@ -27,11 +34,12 @@ class RedpillProvider(ServiceProvider):
         nvidia_payload = data.get("nvidia_payload")
         if isinstance(nvidia_payload, str):
             try:
-                import json
-
                 nvidia_payload = json.loads(nvidia_payload)
             except:
                 pass
+
+        # Include model_id in raw data for verifier to look up app_id
+        data["model_id"] = model_id
 
         return AttestationReport(
             provider="redpill",
@@ -50,6 +58,3 @@ class RedpillProvider(ServiceProvider):
 
         models = data if isinstance(data, list) else data.get("data", [])
         return [m["id"] for m in models]
-
-    def get_verifier(self) -> Verifier:
-        return RedpillVerifier()

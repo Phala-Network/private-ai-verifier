@@ -3,58 +3,18 @@ import json
 import hashlib
 import logging
 import time
-from .dstack import DstackVerifier
+from .base import Verifier
+from .dstack import DstackVerifier, verify_report_data
 from ..types import VerificationResult
 from .nvidia import NvidiaGpuVerifier
 
 logger = logging.getLogger(__name__)
 
 
-class NearAICloudVerifier:
+class NearAICloudVerifier(Verifier):
     def __init__(self, dstack_verifier_url: str = "http://localhost:8080"):
         self.dstack_verifier = DstackVerifier(service_url=dstack_verifier_url)
         self.nvidia_verifier = NvidiaGpuVerifier()
-
-    def _verify_report_data(
-        self, tdx_report_data_hex: str, signing_address: str, request_nonce: str
-    ) -> Dict[str, Any]:
-        """
-        Verify that TDX report data binds the signing address and request nonce.
-        Report Data (64 bytes) = [Signing Address (20 bytes + 12 bytes padding)] + [Nonce (32 bytes)]
-        """
-        try:
-            report_data = bytes.fromhex(tdx_report_data_hex)
-            if len(report_data) != 64:
-                return {
-                    "valid": False,
-                    "error": f"Invalid report_data length: {len(report_data)}",
-                }
-
-            # extracted parts
-            embedded_address_bytes = report_data[:32]
-            embedded_nonce_bytes = report_data[32:]
-
-            # Expected address
-            if signing_address.startswith("0x"):
-                signing_address = signing_address[2:]
-            signing_address_bytes = bytes.fromhex(signing_address)
-            # Pad to 32 bytes (right padding with zeros as per observation/reference)
-            expected_address_bytes = signing_address_bytes.ljust(32, b"\x00")
-
-            address_match = embedded_address_bytes == expected_address_bytes
-
-            # Expected nonce (assuming nonce is 32 bytes hex string)
-            # The nonce in JSON is hex string.
-            expected_nonce_bytes = bytes.fromhex(request_nonce)
-            nonce_match = embedded_nonce_bytes == expected_nonce_bytes
-
-            return {
-                "valid": address_match and nonce_match,
-                "address_match": address_match,
-                "nonce_match": nonce_match,
-            }
-        except Exception as e:
-            return {"valid": False, "error": str(e)}
 
     def _verify_compose_hash(self, app_compose: str, expected_hash: str) -> bool:
         if not app_compose:
@@ -145,7 +105,7 @@ class NearAICloudVerifier:
             # Assuming we rely on dstack_result for now.
 
             if report_data_hex and request_nonce and signing_address:
-                rd_result = self._verify_report_data(
+                rd_result = verify_report_data(
                     report_data_hex, signing_address, request_nonce
                 )
                 results["details"]["report_data_check"] = rd_result

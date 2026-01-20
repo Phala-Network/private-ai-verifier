@@ -1,6 +1,5 @@
 import pytest
 import asyncio
-import json
 from confidential_verifier.sdk import TeeVerifier
 from confidential_verifier.types import AttestationReport
 from .test_data import INTEL_QUOTE_HEX, NVIDIA_PAYLOAD

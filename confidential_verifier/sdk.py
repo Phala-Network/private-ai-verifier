@@ -2,7 +2,7 @@ import time
 from typing import List
 from .types import AttestationReport, VerificationResult
 from .providers import TinfoilProvider, RedpillProvider, NearaiProvider
-from .verifiers import NvidiaGpuVerifier, NearAICloudVerifier
+from .verifiers import NvidiaGpuVerifier, NearAICloudVerifier, RedpillVerifier
 
 
 class TeeVerifier:
@@ -14,6 +14,7 @@ class TeeVerifier:
         }
         self.nvidia_verifier = NvidiaGpuVerifier()
         self.nearai_verifier = NearAICloudVerifier()
+        self.redpill_verifier = RedpillVerifier()
 
     async def fetch_report(
         self, provider_name: str, model_id: str
@@ -38,6 +39,24 @@ class TeeVerifier:
                     error="Missing raw report data for NearAI verification",
                 )
             return await self.nearai_verifier.verify(report.raw)
+
+        # Special handling for Redpill which uses PhalaCloudVerifier internally
+        if provider_name == "redpill":
+            if not report.raw:
+                return VerificationResult(
+                    model_verified=False,
+                    timestamp=time.time(),
+                    hardware_type=["INTEL_TDX"],
+                    claims={},
+                    error="Missing raw report data for Redpill verification",
+                )
+            # Build report data with all required fields
+            report_data = {
+                **report.raw,
+                "request_nonce": report.request_nonce,
+                "nvidia_payload": report.nvidia_payload,
+            }
+            return await self.redpill_verifier.verify(report_data)
 
         provider = self.providers.get(provider_name)
         if not provider:
