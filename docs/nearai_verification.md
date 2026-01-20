@@ -68,7 +68,7 @@ report = await verifier.fetch_report("nearai", "deepseek-ai/DeepSeek-V3.1")
 # Verify
 result = await verifier.verify(report)
 
-if result.level == "HARDWARE_TDX_CC":
+if result.model_verified:
     print("Success: Gateway (TDX) and Model (TDX + GPU) are verified.")
 ```
 

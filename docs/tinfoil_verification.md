@@ -54,6 +54,6 @@ These checks are performed automatically when you verify a report from the `tinf
 verifier = TeeVerifier()
 result = await verifier.verify_model("tinfoil", "doc-upload")
 
-if result.level == VerificationLevel.HARDWARE_TDX:
+if result.model_verified:
     print(f"Verified! Hardware Profile: {result.claims.get('hw_profile')}")
 ```

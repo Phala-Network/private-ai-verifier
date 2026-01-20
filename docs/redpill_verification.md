@@ -48,7 +48,7 @@ async def main():
     print(f"Verifying App: {app_id}...")
     result = await verifier.verify_phala_app(app_id)
 
-    if result.is_valid:
+    if result.model_verified:
         print("Verification Successful!")
         print("Hardware:", result.hardware_type)
         print("Claims:", result.claims.keys())

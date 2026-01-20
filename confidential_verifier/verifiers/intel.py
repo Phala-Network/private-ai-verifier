@@ -2,7 +2,7 @@ import dcap_qvl
 import time
 import json
 from typing import Any, Dict
-from ..types import VerificationResult, VerificationLevel
+from ..types import VerificationResult
 from .base import Verifier
 
 
@@ -40,7 +40,7 @@ class IntelTdxVerifier(Verifier):
             if repo:
                 claims["repo"] = repo
             return VerificationResult(
-                level=VerificationLevel.NONE,
+                model_verified=False,
                 timestamp=time.time(),
                 hardware_type=["INTEL_TDX"],
                 claims=claims,
@@ -83,7 +83,7 @@ class IntelTdxVerifier(Verifier):
 
         if not is_success:
             return VerificationResult(
-                level=VerificationLevel.NONE,
+                model_verified=False,
                 timestamp=time.time(),
                 hardware_type=["INTEL_TDX"],
                 claims=claims,
@@ -92,7 +92,7 @@ class IntelTdxVerifier(Verifier):
             )
 
         return VerificationResult(
-            level=VerificationLevel.HARDWARE_TDX,
+            model_verified=True,
             timestamp=time.time(),
             hardware_type=["INTEL_TDX"],
             claims=claims,

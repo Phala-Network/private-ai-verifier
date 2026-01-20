@@ -2,7 +2,6 @@ import pytest
 import json
 import os
 from confidential_verifier.verifiers.nearai import NearAICloudVerifier
-from confidential_verifier.types import VerificationLevel
 
 
 @pytest.mark.asyncio
@@ -22,7 +21,7 @@ async def test_nearai_verification():
     # Verify
     result = await verifier.verify(data)
 
-    print("\nVerification Result Level:", result.level)
+    print("\nVerification Result Model Verified:", result.model_verified)
     print("Verification Error:", result.error)
     print("Claims:", json.dumps(result.claims, indent=2))
 
@@ -34,7 +33,7 @@ async def test_nearai_verification():
     # We expect the gateway to be valid IF the quote is valid and local verifier handles it.
     # If it fails due to collateral issues, we should at least see specific errors.
 
-    if result.level == VerificationLevel.NONE:
+    if not result.model_verified:
         print(
             "Warning: Verification failed (possibly expected if collateral is old/missing)."
         )
@@ -42,7 +41,4 @@ async def test_nearai_verification():
         if "dstack verification failed" in str(result.error):
             print("Dstack failure detected.")
     else:
-        assert result.level in [
-            VerificationLevel.HARDWARE_TDX,
-            VerificationLevel.HARDWARE_TDX_CC,
-        ]
+        assert result.model_verified

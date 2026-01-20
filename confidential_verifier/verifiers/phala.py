@@ -5,7 +5,7 @@ import time
 from typing import Dict, Any, List, Optional
 import hashlib
 from urllib.parse import urlparse
-from ..types import VerificationResult, VerificationLevel
+from ..types import VerificationResult
 from .base import Verifier
 from .dstack import DstackVerifier
 from .nvidia import NvidiaGpuVerifier
@@ -230,14 +230,12 @@ class PhalaCloudVerifier(Verifier):
             gpu_result = await self._verify_gpu()
 
             # 5. Determine level and error message
-            level = VerificationLevel.NONE
+            model_verified = all_valid
             hardware_types = ["INTEL_TDX"]
 
-            if all_valid:
-                level = VerificationLevel.HARDWARE_TDX
+            if model_verified:
                 if gpu_result:
-                    if gpu_result.level == VerificationLevel.HARDWARE_TDX_CC:
-                        level = VerificationLevel.HARDWARE_TDX_CC
+                    if gpu_result.model_verified:
                         hardware_types.append("NVIDIA_CC")
                     elif gpu_result.error:
                         error_msgs.append(
@@ -270,7 +268,7 @@ class PhalaCloudVerifier(Verifier):
                 claims["nvidia"] = gpu_result.claims
 
             return VerificationResult(
-                level=level,
+                model_verified=model_verified,
                 timestamp=time.time(),
                 hardware_type=hardware_types,
                 claims=claims,
@@ -280,7 +278,7 @@ class PhalaCloudVerifier(Verifier):
         except Exception as e:
             logger.exception("Phala Cloud verification failed")
             return VerificationResult(
-                level=VerificationLevel.NONE,
+                model_verified=False,
                 timestamp=time.time(),
                 hardware_type=[],
                 claims={},
@@ -338,7 +336,7 @@ class PhalaCloudVerifier(Verifier):
         except Exception as e:
             logger.error(f"Error during GPU verification: {e}")
             return VerificationResult(
-                level=VerificationLevel.NONE,
+                model_verified=False,
                 timestamp=time.time(),
                 hardware_type=["NVIDIA_CC"],
                 claims={},

@@ -1,11 +1,10 @@
-from typing import Dict, Optional, Any, List
+from typing import Dict, Optional, Any
 import json
 import hashlib
 import logging
 import time
 from .dstack import DstackVerifier
-from ..types import VerificationResult, VerificationLevel
-from .intel import IntelTdxVerifier  # Fallback/Base
+from ..types import VerificationResult
 from .nvidia import NvidiaGpuVerifier
 
 logger = logging.getLogger(__name__)
@@ -180,7 +179,7 @@ class NearAICloudVerifier:
 
                 results["details"]["gpu"] = gpu_details
 
-                if gpu_result.level == VerificationLevel.NONE:
+                if not gpu_result.model_verified:
                     results["errors"].append(
                         f"GPU verification failed: {gpu_result.error}"
                     )
@@ -201,7 +200,7 @@ class NearAICloudVerifier:
         gateway_data = report_data.get("gateway_attestation")
         if not gateway_data:
             return VerificationResult(
-                level=VerificationLevel.NONE,
+                model_verified=False,
                 error="Missing gateway_attestation",
                 timestamp=time.time(),
                 hardware_type=[],
@@ -227,7 +226,7 @@ class NearAICloudVerifier:
             err for C in component_results.values() for err in C.get("errors", [])
         ]
 
-        level = VerificationLevel.NONE
+        model_verified = all_valid
         # Always list detected hardware
         hardware_types = ["intel_tdx"]
 
@@ -236,11 +235,8 @@ class NearAICloudVerifier:
             if "gpu" in C.get("details", {}):
                 has_gpu = True
 
-        if all_valid:
-            level = VerificationLevel.HARDWARE_TDX
-            if has_gpu:
-                level = VerificationLevel.HARDWARE_TDX_CC
-                hardware_types.append("nvidia_gpu")
+        if model_verified and has_gpu:
+            hardware_types.append("nvidia_gpu")
 
         # Basic claims structure
         claims = {
@@ -250,7 +246,7 @@ class NearAICloudVerifier:
         }
 
         return VerificationResult(
-            level=level,
+            model_verified=model_verified,
             error="; ".join(errors) if errors else None,
             claims=claims,
             hardware_type=hardware_types,

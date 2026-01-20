@@ -1,8 +1,8 @@
 import time
-from typing import Optional, Dict, Any, List
-from .types import AttestationReport, VerificationResult, VerificationLevel
+from typing import List
+from .types import AttestationReport, VerificationResult
 from .providers import TinfoilProvider, RedpillProvider, NearaiProvider
-from .verifiers import NvidiaGpuVerifier, PhalaCloudVerifier, NearAICloudVerifier
+from .verifiers import NvidiaGpuVerifier, NearAICloudVerifier
 
 
 class TeeVerifier:
@@ -31,7 +31,7 @@ class TeeVerifier:
         if provider_name == "nearai":
             if not report.raw:
                 return VerificationResult(
-                    level=VerificationLevel.NONE,
+                    model_verified=False,
                     timestamp=time.time(),
                     hardware_type=["INTEL_TDX"],  # fallback
                     claims={},
@@ -64,7 +64,7 @@ class TeeVerifier:
         # 1. Verify Intel TDX Quote (Mandatory)
         intel_result = await intel_verifier.verify(quote_input)
 
-        if intel_result.level == VerificationLevel.NONE:
+        if not intel_result.model_verified:
             return intel_result
 
         # 2. Verify Nvidia CC Payload if present
@@ -77,9 +77,9 @@ class TeeVerifier:
                 "nvidia": nvidia_result.claims,
             }
 
-            if nvidia_result.level == VerificationLevel.HARDWARE_TDX_CC:
+            if nvidia_result.model_verified:
                 return VerificationResult(
-                    level=VerificationLevel.HARDWARE_TDX_CC,
+                    model_verified=True,
                     timestamp=time.time(),
                     hardware_type=["INTEL_TDX", "NVIDIA_CC"],
                     claims=combined_claims,
@@ -87,7 +87,7 @@ class TeeVerifier:
                 )
             else:
                 return VerificationResult(
-                    level=VerificationLevel.HARDWARE_TDX,
+                    model_verified=intel_result.model_verified,
                     timestamp=time.time(),
                     hardware_type=["INTEL_TDX", "NVIDIA_CC"],
                     claims=combined_claims,

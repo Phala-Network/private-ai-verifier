@@ -3,7 +3,7 @@ import base64
 import json
 import time
 from typing import Dict, Any
-from ..types import VerificationResult, VerificationLevel
+from ..types import VerificationResult
 from .base import Verifier
 
 
@@ -51,11 +51,7 @@ class NvidiaGpuVerifier(Verifier):
             claims = {**platform_claims, **gpu_claims}
 
             return VerificationResult(
-                level=(
-                    VerificationLevel.HARDWARE_TDX_CC
-                    if is_valid
-                    else VerificationLevel.HARDWARE_TDX
-                ),
+                model_verified=is_valid,
                 timestamp=time.time(),
                 hardware_type=["NVIDIA_CC"],
                 claims=claims,
@@ -65,7 +61,7 @@ class NvidiaGpuVerifier(Verifier):
 
         except Exception as e:
             return VerificationResult(
-                level=VerificationLevel.NONE,
+                model_verified=False,
                 timestamp=time.time(),
                 hardware_type=["NVIDIA_CC"],
                 claims={},

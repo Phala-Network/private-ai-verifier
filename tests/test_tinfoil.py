@@ -1,7 +1,6 @@
 import pytest
 import asyncio
 from confidential_verifier.sdk import TeeVerifier
-from confidential_verifier.types import VerificationLevel
 
 
 @pytest.mark.asyncio
@@ -23,17 +22,17 @@ async def test_tinfoil_fetch_and_verify(model_id):
         assert "rt_mr1" in result.claims
 
         # Tinfoil policy checks
-        # Expectations changed: Base verification might fail (Level NONE),
+        # Expectations changed: Base verification might fail (model_verified = False),
         # but the manifest comparison should still succeed (claims populated).
 
-        # If the base verification fails (e.g. TCB status), we get NONE
+        # If the base verification fails (e.g. TCB status), we get model_verified = False
         # but we should still see the hardware profile if manifest check worked.
         assert result.claims.get("hw_profile") is not None
 
-        if result.level == VerificationLevel.NONE:
+        if not result.model_verified:
             print(f"⚠️ Verification failed as expected: {result.error}")
         else:
-            assert result.level == VerificationLevel.HARDWARE_TDX
+            assert result.model_verified
 
         print(
             f"✅ Verified {model_id} successfully. Profile: {result.claims.get('hw_profile')}"
@@ -69,7 +68,7 @@ async def test_tinfoil_policy_only():
     assert "registers" in result.claims
     assert len(result.claims["registers"]) == 5
     print(
-        f"✅ Manual register extraction worked for sample quote. Level: {result.level}"
+        f"✅ Manual register extraction worked for sample quote. Model verified: {result.model_verified}"
     )
 
 

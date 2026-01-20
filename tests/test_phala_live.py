@@ -1,7 +1,6 @@
 import pytest
 import asyncio
 from confidential_verifier.verifiers import PhalaCloudVerifier
-from confidential_verifier.types import VerificationLevel
 
 
 @pytest.mark.asyncio
@@ -19,7 +18,7 @@ async def test_phala_live_verification():
     # This will fetch attestation from Phala Cloud API and verify it locally.
     result = await verifier.verify()
 
-    print(f"Verification level: {result.level}")
+    print(f"Verification result: {result.model_verified}")
     if result.error:
         print(f"Error: {result.error}")
 
@@ -36,12 +35,8 @@ async def test_phala_live_verification():
 
     # Assertions for pytest
     assert (
-        result.level != VerificationLevel.NONE
+        result.model_verified
     ), f"Verification failed with error: {result.error}"
-    assert result.level in [
-        VerificationLevel.HARDWARE_TDX,
-        VerificationLevel.HARDWARE_TDX_CC,
-    ], "Unexpected verification level"
 
     # Assert critical fields are present in claims
     assert "phala" in result.claims, "Missing 'phala' in result claims"

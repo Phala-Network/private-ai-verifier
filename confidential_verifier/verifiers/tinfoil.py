@@ -2,9 +2,9 @@ import time
 import requests
 import json
 import base64
-from typing import Any, List, Dict, Optional
+from typing import Any, List, Dict
 from .intel import IntelTdxVerifier
-from ..types import VerificationResult, VerificationLevel
+from ..types import VerificationResult
 
 # Hardcoded Tinfoil Policy Values
 # derived from https://github.com/tinfoilsh/verifier/blob/main/attestation/tdx.go
@@ -50,7 +50,7 @@ class TinfoilTdxVerifier(IntelTdxVerifier):
                 reasons.append(f"Manifest check failed: {e}")
 
         if reasons:
-            result.level = VerificationLevel.NONE
+            result.model_verified = False
             result.error = (
                 (result.error + "; " if result.error else "")
                 + "Policy violation: "

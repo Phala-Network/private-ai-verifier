@@ -1,12 +1,5 @@
-from enum import Enum
 from typing import Optional, Dict, Any, List
 from pydantic import BaseModel
-
-
-class VerificationLevel(str, Enum):
-    NONE = "NONE"
-    HARDWARE_TDX = "HARDWARE_TDX"
-    HARDWARE_TDX_CC = "HARDWARE_TDX_CC"
 
 
 class AttestationReport(BaseModel):
@@ -18,7 +11,7 @@ class AttestationReport(BaseModel):
 
 
 class VerificationResult(BaseModel):
-    level: VerificationLevel
+    model_verified: bool
     timestamp: float
     hardware_type: List[str]  # e.g., ["INTEL_TDX", "NVIDIA_CC"]
     claims: Dict[str, Any]

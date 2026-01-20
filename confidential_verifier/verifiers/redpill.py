@@ -1,6 +1,6 @@
 from typing import Dict, Any, Union
 from .intel import IntelTdxVerifier
-from ..types import VerificationResult, VerificationLevel
+from ..types import VerificationResult
 
 
 class RedpillVerifier(IntelTdxVerifier):
@@ -50,7 +50,7 @@ class RedpillVerifier(IntelTdxVerifier):
         result = await super().verify(quote)
 
         # If base fails, return result
-        if result.level == VerificationLevel.NONE:
+        if not result.model_verified:
             return result
 
         # 2. Check nonce/address if available in quote input
@@ -74,7 +74,7 @@ class RedpillVerifier(IntelTdxVerifier):
             )
             if not check["valid"]:
                 return VerificationResult(
-                    level=VerificationLevel.NONE,
+                    model_verified=False,
                     timestamp=result.timestamp,
                     hardware_type=["INTEL_TDX"],
                     claims=result.claims,
