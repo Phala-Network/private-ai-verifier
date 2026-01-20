@@ -28,7 +28,12 @@ class RedpillProvider(ServiceProvider):
         response.raise_for_status()
         data = response.json()
 
-        if "intel_quote" not in data:
+        model_atts = data.get("model_attestations", [])
+        intel_quote = data.get("intel_quote")
+        if not intel_quote and model_atts:
+            intel_quote = model_atts[0].get("intel_quote")
+
+        if not intel_quote:
             raise Exception("Redpill report missing intel_quote")
 
         nvidia_payload = data.get("nvidia_payload")
@@ -43,7 +48,7 @@ class RedpillProvider(ServiceProvider):
 
         return AttestationReport(
             provider="redpill",
-            intel_quote=data["intel_quote"],
+            intel_quote=intel_quote,
             request_nonce=nonce,
             nvidia_payload=nvidia_payload,
             raw=data,
