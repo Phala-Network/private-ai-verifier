@@ -20,7 +20,11 @@ The `PhalaCloudVerifier` implements the following steps:
     - Extracts the Intel TDX Quote, Event Log, and VM Config.
     - Uses the `dstack-verifier` tool (Rust binary) to verify the TEE status and replay the event log.
     - Checks that the TCB (Trusted Computing Base) is up-to-date.
-3.  **GPU Verification**:
+3.  **Nonce Verification** (Replay Protection):
+    - The client generates a random 32-byte `nonce` for each request.
+    - The TEE embeds this nonce (along with the signing address) into the TDX Report Data.
+    - The verifier confirms that the `report_data` cryptographically binds the nonce and address, ensuring the report is fresh and intended for this specific request.
+4.  **GPU Verification**:
     - Checks if the app has an assigned GPU.
     - Fetches the Nvidia Attestation Report from the Redpill API.
     - Verifies the Nvidia Remote Attestation Service (NRAS) token and checks for the `x-nvidia-overall-att-result` claim.

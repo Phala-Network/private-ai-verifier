@@ -12,6 +12,7 @@ class VerificationLevel(str, Enum):
 class AttestationReport(BaseModel):
     provider: str  # e.g., "tinfoil", "redpill"
     intel_quote: str  # Hex string
+    request_nonce: Optional[str] = None
     nvidia_payload: Optional[Dict[str, Any]] = None
     raw: Optional[Any] = None
 

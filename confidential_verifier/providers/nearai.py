@@ -37,6 +37,7 @@ class NearaiProvider(ServiceProvider):
         return AttestationReport(
             provider="nearai",
             intel_quote=first["intel_quote"],
+            request_nonce=nonce,
             nvidia_payload=nvidia_payload,
             raw=data,
         )

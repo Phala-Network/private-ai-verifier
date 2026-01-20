@@ -57,6 +57,8 @@ class TeeVerifier:
                 "quote": report.intel_quote,
                 "model_id": report.raw.get("model_id"),
                 "repo": report.raw.get("repo"),
+                "request_nonce": report.request_nonce,
+                "signing_address": report.raw.get("signing_address"),
             }
 
         # 1. Verify Intel TDX Quote (Mandatory)

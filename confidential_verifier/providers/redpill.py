@@ -1,7 +1,9 @@
 import requests
+import secrets
 from typing import List, Dict, Any
 from .base import ServiceProvider
 from ..types import AttestationReport
+from ..verifiers import Verifier, RedpillVerifier
 
 
 class RedpillProvider(ServiceProvider):
@@ -10,9 +12,12 @@ class RedpillProvider(ServiceProvider):
 
     def fetch_report(self, model_id: str) -> AttestationReport:
         url = f"{self.api_base}/attestation/report"
-        print(f"[Redpill] Fetching from {url} for model {model_id}")
+        nonce = secrets.token_hex(32)
+        print(
+            f"[Redpill] Fetching from {url} for model {model_id} with nonce {nonce[:8]}..."
+        )
 
-        response = requests.get(url, params={"model": model_id})
+        response = requests.get(url, params={"model": model_id, "nonce": nonce})
         response.raise_for_status()
         data = response.json()
 
@@ -31,6 +36,7 @@ class RedpillProvider(ServiceProvider):
         return AttestationReport(
             provider="redpill",
             intel_quote=data["intel_quote"],
+            request_nonce=nonce,
             nvidia_payload=nvidia_payload,
             raw=data,
         )
@@ -44,3 +50,6 @@ class RedpillProvider(ServiceProvider):
 
         models = data if isinstance(data, list) else data.get("data", [])
         return [m["id"] for m in models]
+
+    def get_verifier(self) -> Verifier:
+        return RedpillVerifier()
