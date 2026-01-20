@@ -1,10 +1,13 @@
+import logging
 import requests
 import base64
 import json
 import time
 from typing import Dict, Any
-from ..types import VerificationResult
+from ..types import VerificationResult, HARDWARE_NVIDIA_CC
 from .base import Verifier
+
+logger = logging.getLogger(__name__)
 
 
 class NvidiaGpuVerifier(Verifier):
@@ -52,18 +55,20 @@ class NvidiaGpuVerifier(Verifier):
 
             return VerificationResult(
                 model_verified=is_valid,
+                provider="nvidia",
                 timestamp=time.time(),
-                hardware_type=["NVIDIA_CC"],
+                hardware_type=[HARDWARE_NVIDIA_CC],
                 claims=claims,
-                raw=tokens,
                 error=None if is_valid else "Nvidia attestation result is false",
             )
 
         except Exception as e:
+            logger.exception("Nvidia verification failed")
             return VerificationResult(
                 model_verified=False,
+                provider="nvidia",
                 timestamp=time.time(),
-                hardware_type=["NVIDIA_CC"],
+                hardware_type=[],
                 claims={},
                 error=str(e),
             )

@@ -28,21 +28,30 @@ class IntelTdxVerifier(Verifier):
             result = await dcap_qvl.get_collateral_and_verify(quote_bytes)
             res = self._format_result(result)
             if model_id:
-                res.claims["model_id"] = model_id
+                res.model_id = model_id
             if repo:
                 res.claims["repo"] = repo
             return res
         except Exception as e:
             # Best effort: manual parse for registers if verification fails
+            # We still keep the claims clean in the final result, but
+            # TinfoilTdxVerifier might need these fields for policy check.
+            # So we keep the internal parsing but we will filter it out in the final result if needed.
+            # Actually, let's keep the manual parse results in claims for NOW,
+            # and let the subclasses or final formatter clean it up.
             claims = self._manual_parse_tdx(quote_bytes)
-            if model_id:
-                claims["model_id"] = model_id
             if repo:
                 claims["repo"] = repo
+
+            # Ensure status is at least present
+            claims["status"] = "Error"
+
             return VerificationResult(
                 model_verified=False,
+                provider="intel",
                 timestamp=time.time(),
                 hardware_type=["INTEL_TDX"],
+                model_id=model_id,
                 claims=claims,
                 error=f"Verification failed: {e}",
             )
@@ -53,50 +62,29 @@ class IntelTdxVerifier(Verifier):
             "SWHardeningNeeded",
             "ConfigurationNeeded",
             "ConfigurationAndSWHardeningNeeded",
-            # "OutOfDate",
-            # "OutOfDateConfigurationNeeded",
-            # "Revoked",
         ]
 
-        result_json = json.loads(result.to_json())
         claims = {
             "status": result.status,
             "advisory_ids": getattr(result, "advisory_ids", []),
         }
 
-        report = result_json.get("report", {})
-        report_data = {}
-        if "TD10" in report:
-            report_data = report["TD10"]
-        elif "TD15" in report:
-            report_data = report["TD15"]
-
-        if report_data:
-            claims.update(report_data)
-            claims["registers"] = [
-                report_data.get("mr_td", ""),
-                report_data.get("rt_mr0", ""),
-                report_data.get("rt_mr1", ""),
-                report_data.get("rt_mr2", ""),
-                report_data.get("rt_mr3", ""),
-            ]
-
         if not is_success:
             return VerificationResult(
                 model_verified=False,
+                provider="intel",
                 timestamp=time.time(),
                 hardware_type=["INTEL_TDX"],
                 claims=claims,
-                raw=result_json,
                 error=f"Verification failed with status: {result.status}",
             )
 
         return VerificationResult(
             model_verified=True,
+            provider="intel",
             timestamp=time.time(),
             hardware_type=["INTEL_TDX"],
             claims=claims,
-            raw=result_json,
         )
 
     def _manual_parse_tdx(self, quote_bytes: bytes) -> Dict[str, Any]:

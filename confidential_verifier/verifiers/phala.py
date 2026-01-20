@@ -151,9 +151,14 @@ class PhalaCloudVerifier(Verifier):
             if not main_app_vm_config:
                 main_app_vm_config = self.system_info.get("vm_config")
 
+            # Define component names in lower case as requested
+            MODEL_COMPONENT = "model"
+            KMS_COMPONENT = "key management service"
+            GATEWAY_COMPONENT = "gateway"
+
             components = [
                 {
-                    "name": "Main App",
+                    "name": MODEL_COMPONENT,
                     "quote": instance.get("quote"),
                     "event_log": instance.get("eventlog"),
                     "vm_config": main_app_vm_config,
@@ -167,7 +172,7 @@ class PhalaCloudVerifier(Verifier):
                 tcb = kms_info.get("tcb_info", {})
                 components.append(
                     {
-                        "name": "KMS",
+                        "name": KMS_COMPONENT,
                         "quote": kms_info.get("app_certificates", [{}])[0].get("quote"),
                         "event_log": tcb.get("event_log"),
                         "vm_config": kms_info.get("vm_config"),
@@ -181,7 +186,7 @@ class PhalaCloudVerifier(Verifier):
                 tcb = gw_info.get("tcb_info", {})
                 components.append(
                     {
-                        "name": "Gateway",
+                        "name": GATEWAY_COMPONENT,
                         "quote": gw_info.get("app_certificates", [{}])[0].get("quote"),
                         "event_log": tcb.get("event_log"),
                         "vm_config": gw_info.get("vm_config"),
@@ -222,12 +227,14 @@ class PhalaCloudVerifier(Verifier):
 
             # 5. Determine level and error message
             model_verified = all_valid
-            hardware_types = ["INTEL_TDX"]
+            from ..types import HARDWARE_INTEL_TDX, HARDWARE_NVIDIA_CC
+
+            hardware_types = [HARDWARE_INTEL_TDX]
 
             if model_verified:
                 if gpu_result:
                     if gpu_result.model_verified:
-                        hardware_types.append("NVIDIA_CC")
+                        hardware_types.append(HARDWARE_NVIDIA_CC)
                     elif gpu_result.error:
                         error_msgs.append(
                             f"GPU verification failed: {gpu_result.error}"
@@ -240,22 +247,46 @@ class PhalaCloudVerifier(Verifier):
             instances = self.system_info.get("instances", [])
             image_version = instances[0].get("image_version") if instances else None
 
-            phala_claims = {
+            phala_metadata = {
                 "app_id": self.system_info.get("app_id"),
                 "contract_address": self.system_info.get("contract_address"),
                 "image_version": image_version,
                 "kms_info": self.system_info.get("kms_info"),
             }
 
+            # Flatten and Clean up component details
+            flattened_results = {}
+            for r in results:
+                comp_name = r["name"]
+                flattened = {
+                    "is_valid": r["is_valid"],
+                    "compose_verified": r["compose_verified"],
+                }
+                if r.get("reason"):
+                    flattened["reason"] = r["reason"]
+
+                # Merge dstack details
+                details = r.get("details", {})
+                if details:
+                    flattened.update(details)
+                    # Clean up low level dstack details if needed
+                    if "quote" in flattened:
+                        del flattened["quote"]
+
+                flattened_results[comp_name] = flattened
+
             claims = {
-                "components": {r["name"]: r for r in results},
-                "phala": phala_claims,
+                "components": flattened_results,
+                "phala": phala_metadata,
             }
+
             if gpu_result:
+                # We already cleaned up nvidia claims in its verifier
                 claims["nvidia"] = gpu_result.claims
 
             return VerificationResult(
                 model_verified=model_verified,
+                provider="phala",
                 timestamp=time.time(),
                 hardware_type=hardware_types,
                 claims=claims,
@@ -271,4 +302,3 @@ class PhalaCloudVerifier(Verifier):
                 claims={},
                 error=str(e),
             )
-

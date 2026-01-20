@@ -90,6 +90,7 @@ class TinfoilProvider(ServiceProvider):
 
         return AttestationReport(
             provider="tinfoil",
+            model_id=model_id,
             intel_quote=quote_bytes.hex(),
             nvidia_payload=None,
             raw=data,

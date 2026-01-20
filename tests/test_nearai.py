@@ -27,9 +27,9 @@ async def test_nearai_verification():
 
     # Basic assertions structure
     assert result.claims is not None
-    assert "Gateway" in result.claims["components"]
+    assert "gateway" in result.claims["components"]
 
-    gateway_res = result.claims["components"]["Gateway"]
+    gateway_res = result.claims["components"]["gateway"]
     # We expect the gateway to be valid IF the quote is valid and local verifier handles it.
     # If it fails due to collateral issues, we should at least see specific errors.
 

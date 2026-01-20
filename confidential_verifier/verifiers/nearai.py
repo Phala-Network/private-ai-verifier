@@ -153,7 +153,10 @@ class NearAICloudVerifier(Verifier):
         return results
 
     async def verify(
-        self, report_data: Dict[str, Any], request_nonce: Optional[str] = None
+        self,
+        report_data: Dict[str, Any],
+        request_nonce: Optional[str] = None,
+        model_id: Optional[str] = None,
     ) -> VerificationResult:
         component_results = {}
 
@@ -161,6 +164,8 @@ class NearAICloudVerifier(Verifier):
         if not gateway_data:
             return VerificationResult(
                 model_verified=False,
+                provider="nearai",
+                model_id=model_id,
                 error="Missing gateway_attestation",
                 timestamp=time.time(),
                 hardware_type=[],
@@ -170,16 +175,53 @@ class NearAICloudVerifier(Verifier):
         if not request_nonce:
             request_nonce = gateway_data.get("request_nonce")
 
+        signing_address = gateway_data.get("signing_address")
+
         gateway_res = await self._verify_component(
-            "Gateway", gateway_data, request_nonce
+            "gateway", gateway_data, request_nonce
         )
-        component_results["Gateway"] = gateway_res
+        component_results["gateway"] = gateway_res
 
         model_attestations = report_data.get("model_attestations", [])
         for i, model_data in enumerate(model_attestations):
-            name = f"Model-{i}"
+            name = "model" if i == 0 else f"model-{i}"
             model_res = await self._verify_component(name, model_data, request_nonce)
             component_results[name] = model_res
+
+        # Flatten and Clean up component details
+        flattened_components = {}
+        nvidia_claims = None
+        report_data_check = None
+
+        for comp_name, comp in component_results.items():
+            flattened = {
+                "is_valid": comp.get("is_valid", False),
+            }
+            if comp.get("errors"):
+                flattened["errors"] = comp["errors"]
+
+            # Flatten dstack
+            dstack_info = comp.get("details", {}).get("dstack", {})
+            if dstack_info:
+                dstack_details = dstack_info.get("details", {})
+                if dstack_details:
+                    # Merge dstack info directly into the component
+                    flattened.update(dstack_details)
+                    # Remove huge raw quote if it's there
+                    if "quote" in flattened:
+                        del flattened["quote"]
+
+            # Extract GPU if present -> Move to top-level "nvidia"
+            gpu_info = comp.get("details", {}).get("gpu", {})
+            if gpu_info:
+                nvidia_claims = gpu_info.get("claims")
+
+            # Extract report_data_check if present -> Move to top-level
+            rd_check = comp.get("details", {}).get("report_data_check")
+            if rd_check:
+                report_data_check = rd_check
+
+            flattened_components[comp_name] = flattened
 
         all_valid = all(C.get("is_valid", False) for C in component_results.values())
         errors = [
@@ -187,26 +229,25 @@ class NearAICloudVerifier(Verifier):
         ]
 
         model_verified = all_valid
-        # Always list detected hardware
-        hardware_types = ["intel_tdx"]
+        from ..types import HARDWARE_INTEL_TDX, HARDWARE_NVIDIA_CC
 
-        has_gpu = False
-        for C in component_results.values():
-            if "gpu" in C.get("details", {}):
-                has_gpu = True
+        hardware_types = [HARDWARE_INTEL_TDX]
 
-        if model_verified and has_gpu:
-            hardware_types.append("nvidia_gpu")
+        if nvidia_claims:
+            hardware_types.append(HARDWARE_NVIDIA_CC)
 
-        # Basic claims structure
         claims = {
-            "components": component_results,
-            "request_nonce": request_nonce,
-            "signing_address": gateway_data.get("signing_address"),
+            "components": flattened_components,
         }
+        if nvidia_claims:
+            claims["nvidia"] = nvidia_claims
 
         return VerificationResult(
             model_verified=model_verified,
+            provider="nearai",
+            model_id=model_id,
+            request_nonce=request_nonce,
+            signing_address=signing_address,
             error="; ".join(errors) if errors else None,
             claims=claims,
             hardware_type=hardware_types,

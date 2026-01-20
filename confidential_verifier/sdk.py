@@ -38,7 +38,11 @@ class TeeVerifier:
                     claims={},
                     error="Missing raw report data for NearAI verification",
                 )
-            return await self.nearai_verifier.verify(report.raw)
+            return await self.nearai_verifier.verify(
+                report.raw,
+                request_nonce=report.request_nonce,
+                model_id=report.model_id,
+            )
 
         # Special handling for Redpill which uses PhalaCloudVerifier internally
         if provider_name == "redpill":

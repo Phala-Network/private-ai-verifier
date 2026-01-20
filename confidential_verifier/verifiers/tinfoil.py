@@ -30,22 +30,48 @@ RTMR3_ZERO = "00" * 48
 
 class TinfoilTdxVerifier(IntelTdxVerifier):
     async def verify(self, quote: Any) -> VerificationResult:
+        # Use a temporary dict for policy check that contains low-level info
+        # because the base IntelTdxVerifier._format_result already removed them from result.claims
+        # Wait, if I call super().verify(quote), and it succeeds, it returns a result with clean claims.
+        # But tinfoil needs those claims to check policy.
+
+        # Let's override verify to do manual parse for policy check first or use the raw result if we had it.
+        # Actually, let's just use the manual parse for now to get the fields needed for policy.
+        if isinstance(quote, str):
+            quote_bytes = bytes.fromhex(quote)
+        elif isinstance(quote, bytes):
+            quote_bytes = quote
+        elif isinstance(quote, dict):
+            quote_hex = quote.get("quote", "")
+            quote_bytes = (
+                bytes.fromhex(quote_hex) if isinstance(quote_hex, str) else quote_hex
+            )
+        else:
+            raise ValueError("Quote must be hex string, bytes, or dict")
+
+        internal_claims = self._manual_parse_tdx(quote_bytes)
+
+        # Now call base verify to get the official verification status
         result = await super().verify(quote)
+        result.provider = "tinfoil"
 
-        claims = result.claims
-        if not claims:
-            return result
-
-        repo = claims.get("repo")
+        # The base verifier might have set repo if it was in the quote dict
+        repo = internal_claims.get("repo") or (
+            quote.get("repo") if isinstance(quote, dict) else None
+        )
         reasons = []
 
         # 1. Hardware Policy (MrSeam, Attributes, Xfam, Zero fields)
-        self._check_hardware_policy(claims, reasons)
+        self._check_hardware_policy(internal_claims, reasons)
 
         # 2. Manifest Comparison (Golden Values)
         if repo:
             try:
-                await self._check_manifest_policy(claims, repo, reasons)
+                await self._check_manifest_policy(internal_claims, repo, reasons)
+                # If hw_profile was found, add it to the final result claims
+                if "hw_profile" in internal_claims:
+                    result.claims["hw_profile"] = internal_claims["hw_profile"]
+                result.claims["repo"] = repo
             except Exception as e:
                 reasons.append(f"Manifest check failed: {e}")
 
@@ -57,9 +83,6 @@ class TinfoilTdxVerifier(IntelTdxVerifier):
                 + ", ".join(reasons)
             )
 
-        # If Tinfoil policy passes (no reasons), we retain the result from the base verifier.
-        # This means if the base verification failed (e.g. invalid collateral),
-        # result.level remains NONE and the original error is preserved.
         return result
 
     def _check_hardware_policy(self, claims: Dict[str, Any], reasons: List[str]):

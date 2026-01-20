@@ -48,6 +48,7 @@ class RedpillProvider(ServiceProvider):
 
         return AttestationReport(
             provider="redpill",
+            model_id=model_id,
             intel_quote=intel_quote,
             request_nonce=nonce,
             nvidia_payload=nvidia_payload,

@@ -145,8 +145,10 @@ class RedpillVerifier(Verifier):
                 result = await tinfoil_verifier.verify(
                     {"quote": intel_quote, "repo": repo, "model_id": tinfoil_id}
                 )
-                result.claims["redpill_model_id"] = model_id
+                result.provider = "redpill"
+                result.model_id = model_id
                 result.claims["model_provider"] = "tinfoil"
+                result.claims["tinfoil_model_id"] = tinfoil_id
                 return result
 
             # --- NearAI Distribution ---
@@ -161,6 +163,7 @@ class RedpillVerifier(Verifier):
                 if not nearai_id:
                     return VerificationResult(
                         model_verified=False,
+                        provider="redpill",
                         timestamp=time.time(),
                         hardware_type=[],
                         claims={"model_id": model_id, "providers": providers},
@@ -171,7 +174,6 @@ class RedpillVerifier(Verifier):
                     dstack_verifier_url=self.dstack_verifier_url
                 )
                 # NearAI verifier expects the raw data from NearAI API
-                # Redpill's report_data.get("raw") should contain it
                 raw_data = report_data.get("raw") or report_data
 
                 # For NearAI resold via Redpill, we only care about the first model attestation
@@ -182,7 +184,8 @@ class RedpillVerifier(Verifier):
                         raw_data["model_attestations"] = [model_atts[0]]
 
                 result = await nearai_verifier.verify(raw_data)
-                result.claims["redpill_model_id"] = model_id
+                result.provider = "redpill"
+                result.model_id = model_id
                 result.claims["nearai_model_id"] = nearai_id
                 result.claims["model_provider"] = "nearai"
                 return result
@@ -193,6 +196,7 @@ class RedpillVerifier(Verifier):
                 if not app_id:
                     return VerificationResult(
                         model_verified=False,
+                        provider="redpill",
                         timestamp=time.time(),
                         hardware_type=[],
                         claims={"model_id": model_id},
@@ -214,18 +218,20 @@ class RedpillVerifier(Verifier):
                     dstack_verifier_url=self.dstack_verifier_url,
                 )
                 result = await phala_verifier.verify(nvidia_payload=nvidia_payload)
+                result.provider = "redpill"
+                result.model_id = model_id
 
-                # Add model info to claims
-                result.claims["model_id"] = model_id
-                result.claims["app_id"] = app_id
-                result.claims["model_provider"] = "phala"
+                # Update Phala metadata
+                if "phala" in result.claims:
+                    result.claims["phala"]["model_provider"] = "phala"
+                else:
+                    result.claims["model_provider"] = "phala"
 
                 # If TEE verification failed, return early
                 if not result.model_verified:
                     return result
 
                 # 4. Verify report data binding (nonce/address) against the Redpill intel_quote
-                # The intel_quote from Redpill API contains the nonce/address that was passed to it
                 request_nonce = report_data.get("request_nonce")
                 signing_address = report_data.get("signing_address")
                 intel_quote = report_data.get("intel_quote")
@@ -239,22 +245,22 @@ class RedpillVerifier(Verifier):
                     rd_check = verify_report_data(
                         report_data_hex, signing_address, request_nonce
                     )
-                    result.claims["report_data_check"] = rd_check
 
                     if not rd_check["valid"]:
                         return VerificationResult(
                             model_verified=False,
+                            provider="redpill",
                             timestamp=result.timestamp,
                             hardware_type=result.hardware_type,
+                            model_id=model_id,
+                            request_nonce=request_nonce,
+                            signing_address=signing_address,
                             claims=result.claims,
-                            raw=result.raw,
                             error=f"Report data binding failed: {rd_check.get('error') or 'Address/Nonce mismatch'}",
                         )
 
-                    result.claims["nonce_verified"] = True
-                    result.claims["signing_address_verified"] = True
-                    result.claims["request_nonce"] = request_nonce
-                    result.claims["signing_address"] = signing_address
+                    result.request_nonce = request_nonce
+                    result.signing_address = signing_address
 
                 return result
 

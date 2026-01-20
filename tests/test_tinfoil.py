@@ -18,16 +18,13 @@ async def test_tinfoil_fetch_and_verify(model_id):
 
         # Claims should be extracted
         assert result.claims is not None
-        assert "mr_td" in result.claims
-        assert "rt_mr1" in result.claims
+        assert "status" in result.claims
+        assert "hw_profile" in result.claims
+        assert "repo" in result.claims
 
-        # Tinfoil policy checks
-        # Expectations changed: Base verification might fail (model_verified = False),
-        # but the manifest comparison should still succeed (claims populated).
-
-        # If the base verification fails (e.g. TCB status), we get model_verified = False
-        # but we should still see the hardware profile if manifest check worked.
-        assert result.claims.get("hw_profile") is not None
+        # Low-level registers should NOT be in claims anymore
+        assert "mr_td" not in result.claims
+        assert "rt_mr1" not in result.claims
 
         if not result.model_verified:
             print(f"⚠️ Verification failed as expected: {result.error}")
@@ -64,9 +61,10 @@ async def test_tinfoil_policy_only():
     tinfoil = verifier.providers["tinfoil"]
     result = await tinfoil.get_verifier().verify(INTEL_QUOTE_HEX)
 
-    # Even if it fails policy, we should get registers
-    assert "registers" in result.claims
-    assert len(result.claims["registers"]) == 5
+    # Even if it fails policy, we should get status
+    assert "status" in result.claims
+    # Registers should NOT be in claims
+    assert "registers" not in result.claims
     print(
         f"✅ Manual register extraction worked for sample quote. Model verified: {result.model_verified}"
     )
