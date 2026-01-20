@@ -13,18 +13,18 @@ Tinfoil verification extends standard Intel TDX verification with two additional
 
 The verifier enforces strict checks on the platform's configuration to ensure it matches Tinfoil's secure baseline.
 
-- **MR_SEAM**: The measurement of the TDX Module. Must match one of Tinfoil's accepted TDX module versions.
-- **TdAttributes**: Ensures debug mode is disabled (`0x0000001000000000`).
-- **XFAM (Extended Features)**: Validates the CPU features available to the guest match Tinfoil's QEMU configuration (`0xe702060000000000`).
-- **Zero Fields**: Ensures sensitive fields like `MrOwner`, `MrOwnerConfig`, and `RTMR3` are strictly zeroed out.
+- **MR_SEAM**: The measurement of the Intel TDX Module hash. This must match a known, secure version of the Intel TDX firmware to ensure no vulnerabilities in the TEE management layer itself.
+- **TdAttributes**: Ensures debug mode is disabled (`0x0000001000000000`). A debuggable enclave is not secure as its memory can be inspected by the host.
+- **XFAM (Extended Features)**: Validates the CPU features (like AVX, AMX) available to the guest match Tinfoil's secure baseline (`0xe702060000000000`).
+- **Zero Fields**: Ensures sensitive fields like `MrOwner`, `MrOwnerConfig`, and `RTMR3` are strictly zeroed out. `RTMR3` is often used for custom OS/runtime measurements; enforcing it as zero ensures a "pure" environment without side-loaded untrusted code.
 
 ### 2. Automated Manifest Comparison
 
 To verify that the code running inside the TEE is exactly what Tinfoil released, the SDK automatically fetches "Golden Values" from Tinfoil's transparency log.
 
-#### Sigstore Integration
+#### Sigstore Transparency Log
 
-The verifier connects to Tinfoil's proxies to securely fetch attestation bundles:
+Tinfoil uses Sigstore to publish and sign "Golden Values" of their software releases and hardware profiles. This allows the verifier to independently prove that the measurements in the hardware quote match a version of the software that was officially signed and released by Tinfoil.
 
 - **GitHub Proxy**: `api-github-proxy.tinfoil.sh` (fetches release tags and digests)
 - **Attestation Proxy**: `gh-attestation-proxy.tinfoil.sh` (fetches Sigstore bundles)
@@ -44,7 +44,20 @@ Tinfoil publishes global hardware measurements for its fleet. The verifier:
 
 1.  Fetches the `hardware-measurements` bundle from `tinfoilsh/hardware-measurements`.
 2.  Extracts known profiles (e.g., `medium_0d`).
-3.  Checks if the quote's `MRTD` (Build measurement) and `RTMR0` (Firmware measurement) match any known validated profile.
+3.  Checks if the quote's `MR_TD` (Build measurement) and `RT_MR0` (Firmware measurement) match any known validated profile.
+
+## Data Collection & External APIs
+
+Tinfoil verification is highly transparent and relies on public proxies to fetch signed measurements:
+
+1.  **Enclave Host** (`https://{model-enclave-host}/.well-known/tinfoil-attestation`):
+    - Fetches the gzipped TDX quote directly from the running service.
+2.  **Tinfoil GitHub Proxy** (`https://api-github-proxy.tinfoil.sh`):
+    - Fetches latest release tags and the `tinfoil.hash` file containing the SHA256 digest of the release artifact.
+3.  **Sigstore Attestation Proxy** (`https://gh-attestation-proxy.tinfoil.sh`):
+    - Fetches the signed Sigstore bundles for both the application image (`repo`) and the global hardware profiles (`tinfoilsh/hardware-measurements`).
+4.  **Intel PCS (via Dstack/QVL)**:
+    - Standard Intel TDX verification also involves reaching out to Intel's Provisioning Certification Service to validate the hardware collateral.
 
 ## Usage
 
@@ -57,3 +70,8 @@ result = await verifier.verify_model("tinfoil", "doc-upload")
 if result.model_verified:
     print(f"Verified! Hardware Profile: {result.claims.get('hw_profile')}")
 ```
+
+## References
+
+- **Tinfoil Verifier Source**: [tinfoilsh/verifier](https://github.com/tinfoilsh/verifier)
+- **Tinfoil Verification Docs**: [How to Verify](https://docs.tinfoil.sh/verification/how-to-verify)

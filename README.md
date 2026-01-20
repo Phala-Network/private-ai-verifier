@@ -2,126 +2,41 @@
 
 A pure Python SDK for fetching and verifying TEE (Trusted Execution Environment) hardware attestation reports from various providers like Tinfoil, Redpill, and Near AI. Supports both Intel TDX and Nvidia CC (Confidential Computing) GPU attestation.
 
-## Features
+## 1. Dependencies and Pre-requisites
 
-- **Multi-Provider Support**: Fetch reports from Tinfoil, Redpill, and Near AI.
-- **Hardware Verification**:
-  - **Intel TDX**: Using the `dcap-qvl` Python package.
-  - **Nvidia CC**: Using Nvidia's NRAS (Nvidia Remote Attestation Service).
-- **Clear Verification Levels**: Easily distinguish between failed, TDX-only, and TDX + GPU successful attestations.
-- **Phala Cloud Verification**: Verify Redpill models running as dstack apps on Phala Cloud.
-- **`uv` Ready**: Managed with `uv` for modern, fast Python dependency management.
-- **Docker Support**: Built-in support for `dstack-verifier` service via Docker.
-- **Built-in Server**: Includes a FastAPI server for testing and easy integration.
+To ensure reliable verification, the following dependencies are required:
 
-## Documentation
+- **Python Runtime (`uv`)**: We use [uv](https://github.com/astral-sh/uv) for modern, fast Python dependency management.
+- **Docker**: Required for running the `dstack-verifier` service.
+- **DStack Verifier**: The verification process for Redpill and Near AI apps relies on `dstack-verifier`, which uses **QEMU** internally. QEMU is essential to stably reproduce ACPI table contents and other low-level boot measurements required for TDX quote verification.
 
-- [Tinfoil Verification Details](docs/tinfoil_verification.md): Explains hardware policy checks and automated Sigstore manifest comparison.
-- [Redpill Verification Details](docs/redpill_verification.md): Explains the verification chain for Phala Cloud apps.
-- [NearAI Verification Details](docs/nearai_verification.md): Explains the multi-component verification (Gateway + Models) and report data checks.
-
-## Installation
-
-Ensure you have `uv` installed. Then:
+### Setup
 
 ```bash
-cd python-sdk
+# 1. Start the dstack-verifier service
+docker compose up -d
+
+# 2. Sync dependencies
 uv sync
 ```
 
-## SDK Usage
+## 2. Configuration
 
-The SDK provides a clean API with separate `fetch_report()` and `verify()` steps.
+For **Tinfoil** verification, the SDK requires an enclave configuration file.
 
-```python
-import asyncio
-from confidential_verifier import TeeVerifier
+> [!IMPORTANT]
+> Always ensure you are using the latest `tinfoil_config.yml`. The SDK looks for this file in `config/tinfoil_config.yml`.
 
-async def main():
-    verifier = TeeVerifier()
-
-    # 1. Fetch a report from a provider
-    report = await verifier.fetch_report("redpill", "meta-llama/Llama-3.3-70B-Instruct")
-
-    # 2. Verify the report
-    result = await verifier.verify(report)
-
-    print(f"Verification Level: {result.level}")
-    if result.level == "HARDWARE_TDX_CC":
-        print("Success: Both TDX and Nvidia CC are verified!")
-    elif result.level == "HARDWARE_TDX":
-        print("Success: TDX verified (no GPU or GPU verification failed).")
-    else:
-        print(f"Failed: {result.error}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-### Phala Cloud / Redpill Usage
-
-To verify a Redpill App by its ID (which verifies the dstack container and optional GPU), you use the `PhalaCloudVerifier` directly:
-
-```python
-import asyncio
-from confidential_verifier.verifiers import PhalaCloudVerifier
-
-async def main():
-    # Verify a Redpill specific App ID
-    # Requires dstack-verifier service running (see Deployment)
-    verifier = PhalaCloudVerifier("0c92fd1f89abe33ab0c4ac7f86856f79217e9038")
-    result = await verifier.verify()
-    print(f"Is valid: {result.level != 'NONE'}")
-    print(f"Level: {result.level}")
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-### NearAI Usage
-
-To verify a NearAI model, use the standard `TeeVerifier` with the `nearai` provider. The verifier will automatically handle the complex report format which includes both Gateway and Model attestations.
-
-```python
-import asyncio
-from confidential_verifier import TeeVerifier
-
-async def main():
-    verifier = TeeVerifier()
-
-    # 1. Fetch report from NearAI
-    # Note: Requires NEARAI_API_KEY environment variable if applicable/needed.
-    report = await verifier.fetch_report("nearai", "deepseek-ai/DeepSeek-V3.1")
-
-    # 2. Verify (Checks Gateway + Model logic)
-    result = await verifier.verify(report)
-
-    print(f"Level: {result.level}")
-    # NearAI reports will verify against Intel TDX (Gateway) and Nvidia GPU (Model)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-```
-
-- `NONE`: Verification failed.
-- `HARDWARE_TDX`: Intel TDX hardware verification passed.
-- `HARDWARE_TDX_CC`: Both Intel TDX and Nvidia CC (GPU) hardware verification passed.
-
-## Deployment
-
-### DStack Verifier Service
-
-For Phala Cloud verification, the SDK requires the `dstack-verifier` service to be running. You can start it using Docker:
+To update the config:
 
 ```bash
-docker compose up -d
+# Fetch latest config
+uv run scripts/update_config.py
 ```
 
-This will start the `dstacktee/dstack-verifier` image on `http://localhost:8080`, which the SDK uses by default.
+## 3. Quick Test via Server
 
-## API Server
-
-The SDK includes a FastAPI server that mirrors the functionality of the original TypeScript version.
+The SDK includes a FastAPI server for testing and easy integration. This is the fastest way to verify models.
 
 ### Run the Server
 
@@ -129,23 +44,130 @@ The SDK includes a FastAPI server that mirrors the functionality of the original
 PYTHONPATH=. uv run python server/main.py
 ```
 
-The server will be available at `http://0.0.0.0:8000`.
+### Quick Verification Check
 
-### Endpoints
+You can use `curl` to verify any supported model.
 
-- `GET /providers`: List available TEE providers.
-- `GET /models?provider=<name>`: List supported models for a provider.
-- `GET /fetch-report?provider=<name>&model_id=<id>`: Fetch an attestation report.
-- `POST /verify`: Verify a JSON-encoded `AttestationReport`.
-
-## Testing
-
-Run the included test suite to verify the SDK against hardcoded test data:
+**Example: Verifying a Tinfoil Model**
 
 ```bash
-PYTHONPATH=. uv run python -m tests.test_sdk
+curl "http://localhost:8000/verify-model?provider=tinfoil&model_id=kimi-k2-thinking"
 ```
 
-## Configuration
+**Example Output:**
 
-For **Tinfoil**, you may need to download the enclave configuration. The SDK looks for `tinfoil_config.yml` in the `python-sdk/config/` or the root `src/config/` directory.
+```json
+{
+  "model_verified": true,
+  "provider": "tinfoil",
+  "timestamp": 1768923695.4072542,
+  "hardware_type": ["INTEL_TDX"],
+  "model_id": "kimi-k2-thinking",
+  "claims": {
+    "status": "UpToDate",
+    "hw_profile": "large_1d_new"
+  },
+  "error": null
+}
+```
+
+## 4. SDK Usage and Sample Outputs
+
+The SDK provides a clean API for programmatic verification.
+
+### Sample Code (Python)
+
+```python
+import asyncio
+from confidential_verifier import TeeVerifier
+
+async def main():
+    verifier = TeeVerifier()
+
+    # Verify a model directly (fetches + verifies)
+    # Supports "redpill", "nearai", "tinfoil"
+    result = await verifier.verify_model("redpill", "meta-llama/llama-3.3-70b-instruct")
+
+    print(f"Model Verified: {result.model_verified}")
+    print(f"Hardware: {result.hardware_type}")
+
+    if result.model_verified:
+        print(f"Claims: {result.claims}")
+    else:
+        print(f"Error: {result.error}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Sample Outputs
+
+#### NearAI
+
+```json
+{
+  "model_verified": true,
+  "provider": "nearai",
+  "hardware_type": ["INTEL_TDX", "NVIDIA_CC"],
+  "model_id": "openai/gpt-oss-120b",
+  "request_nonce": "7299aba5...",
+  "signing_address": "0x5c49f3...",
+  "claims": {
+    "components": {
+      "gateway": { "is_valid": true, "tcb_status": "UpToDate" },
+      "model": { "is_valid": true, "tcb_status": "UpToDate" }
+    },
+    "nvidia": { "x-nvidia-overall-att-result": true }
+  }
+}
+```
+
+#### Redpill
+
+```json
+{
+  "model_verified": true,
+  "provider": "redpill",
+  "hardware_type": ["INTEL_TDX", "NVIDIA_CC"],
+  "model_id": "phala/gpt-oss-20b",
+  "claims": {
+    "phala": { "model_provider": "phala" },
+    "nvidia": { "x-nvidia-overall-att-result": true }
+  }
+}
+```
+
+#### Tinfoil
+
+```json
+{
+  "model_verified": true,
+  "provider": "tinfoil",
+  "timestamp": 1768923695.4072542,
+  "hardware_type": ["INTEL_TDX"],
+  "model_id": "kimi-k2-thinking",
+  "request_nonce": null,
+  "signing_address": null,
+  "claims": {
+    "status": "UpToDate",
+    "advisory_ids": [],
+    "repo": "tinfoilsh/confidential-kimi-k2-thinking",
+    "hw_profile": "large_1d_new"
+  },
+  "error": null
+}
+```
+
+## Documentation
+
+- [Tinfoil Verification Details](docs/tinfoil_verification.md)
+- [Redpill Verification Details](docs/redpill_verification.md)
+- [NearAI Verification Details](docs/nearai_verification.md)
+
+## Features
+
+- **Multi-Provider Support**: Tinfoil, Redpill, and Near AI.
+- **Hardware Verification**: Intel TDX and Nvidia CC (GPU).
+- **Phala Cloud Integration**: Native support for dstack apps on Phala.
+- **Resale Verification**: Correctly verifies models resold between providers.
+- **Automated Manifests**: Sigstore integration for Tinfoil.
