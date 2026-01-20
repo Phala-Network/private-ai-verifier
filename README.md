@@ -18,6 +18,7 @@ A pure Python SDK for fetching and verifying TEE (Trusted Execution Environment)
 
 - [Tinfoil Verification Details](docs/tinfoil_verification.md): Explains hardware policy checks and automated Sigstore manifest comparison.
 - [Redpill Verification Details](docs/redpill_verification.md): Explains the verification chain for Phala Cloud apps.
+- [NearAI Verification Details](docs/nearai_verification.md): Explains the multi-component verification (Gateway + Models) and report data checks.
 
 ## Installation
 
@@ -72,6 +73,31 @@ async def main():
     result = await verifier.verify()
     print(f"Is valid: {result.level != 'NONE'}")
     print(f"Level: {result.level}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### NearAI Usage
+
+To verify a NearAI model, use the standard `TeeVerifier` with the `nearai` provider. The verifier will automatically handle the complex report format which includes both Gateway and Model attestations.
+
+```python
+import asyncio
+from confidential_verifier import TeeVerifier
+
+async def main():
+    verifier = TeeVerifier()
+
+    # 1. Fetch report from NearAI
+    # Note: Requires NEARAI_API_KEY environment variable if applicable/needed.
+    report = await verifier.fetch_report("nearai", "deepseek-ai/DeepSeek-V3.1")
+
+    # 2. Verify (Checks Gateway + Model logic)
+    result = await verifier.verify(report)
+
+    print(f"Level: {result.level}")
+    # NearAI reports will verify against Intel TDX (Gateway) and Nvidia GPU (Model)
 
 if __name__ == "__main__":
     asyncio.run(main())

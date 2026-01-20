@@ -2,7 +2,7 @@ import time
 from typing import Optional, Dict, Any, List
 from .types import AttestationReport, VerificationResult, VerificationLevel
 from .providers import TinfoilProvider, RedpillProvider, NearaiProvider
-from .verifiers import NvidiaGpuVerifier, PhalaCloudVerifier
+from .verifiers import NvidiaGpuVerifier, PhalaCloudVerifier, NearAICloudVerifier
 
 
 class TeeVerifier:
@@ -13,6 +13,7 @@ class TeeVerifier:
             "nearai": NearaiProvider(),
         }
         self.nvidia_verifier = NvidiaGpuVerifier()
+        self.nearai_verifier = NearAICloudVerifier()
 
     async def fetch_report(
         self, provider_name: str, model_id: str
@@ -25,6 +26,19 @@ class TeeVerifier:
     async def verify(self, report: AttestationReport) -> VerificationResult:
         # Get provider from report
         provider_name = report.provider.lower()
+
+        # Special handling for NearAI which has a complex multi-component report
+        if provider_name == "nearai":
+            if not report.raw:
+                return VerificationResult(
+                    level=VerificationLevel.NONE,
+                    timestamp=time.time(),
+                    hardware_type=["INTEL_TDX"],  # fallback
+                    claims={},
+                    error="Missing raw report data for NearAI verification",
+                )
+            return await self.nearai_verifier.verify(report.raw)
+
         provider = self.providers.get(provider_name)
         if not provider:
             # Fallback for reports that might have been saved before this change
