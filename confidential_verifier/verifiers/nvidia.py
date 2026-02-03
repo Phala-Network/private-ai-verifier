@@ -1,8 +1,8 @@
 import logging
 import requests
-import base64
 import json
 import time
+import jwt
 from typing import Dict, Any
 from ..types import VerificationResult, HARDWARE_NVIDIA_CC
 from .base import Verifier
@@ -75,18 +75,12 @@ class NvidiaGpuVerifier(Verifier):
 
     def _decode_jwt(self, token: str) -> Dict[str, Any]:
         try:
-            parts = token.split(".")
-            if len(parts) != 3:
-                return {}
-
-            payload_b64 = parts[1]
-            # Add padding if needed
-            missing_padding = len(payload_b64) % 4
-            if missing_padding:
-                payload_b64 += "=" * (4 - missing_padding)
-
-            decoded = base64.b64decode(payload_b64).decode("utf-8")
-            return json.loads(decoded)
+            # TODO: Fetch JWKS from Nvidia and enable signature verification for better security.
+            return jwt.decode(
+                token,
+                options={"verify_signature": False},
+                algorithms=["RS256", "ES256", "ES384", "PS256"],
+            )
         except Exception as e:
-            print(f"Failed to decode JWT: {e}")
+            logger.error(f"Failed to decode JWT: {e}")
             return {}

@@ -34,6 +34,18 @@ To update the config:
 uv run scripts/update_config.py
 ```
 
+### Intel Trust Authority (Optional)
+
+The SDK supports optional remote appraisal of Intel TDX quotes via Intel Trust Authority (ITA). This works with **all** supported providers (Tinfoil, Redpill, NearAI).
+
+To enable this, obtain an API key from the [Intel Trust Authority Portal](https://portal.trustauthority.intel.com/) and set it in your `.env` file:
+
+```bash
+INTEL_TRUST_AUTHORITY_API_KEY="your-api-key-here"
+```
+
+When enabled, the verification result will include an additional `intel_trust_authority` claim containing the appraisal details.
+
 ## 3. Quick Test via Server
 
 The SDK includes a FastAPI server for testing and easy integration. This is the fastest way to verify models.
@@ -163,11 +175,12 @@ if __name__ == "__main__":
 - [Tinfoil Verification Details](docs/tinfoil_verification.md)
 - [Redpill Verification Details](docs/redpill_verification.md)
 - [NearAI Verification Details](docs/nearai_verification.md)
+- [Intel Trust Authority Details](docs/intel-ita.md)
 
 ## Features
 
 - **Multi-Provider Support**: Tinfoil, Redpill, and Near AI.
-- **Hardware Verification**: Intel TDX and Nvidia CC (GPU).
+- **Hardware Verification**: Intel TDX (Local + Remote ITA) and Nvidia CC (GPU).
 - **Phala Cloud Integration**: Native support for dstack apps on Phala.
 - **Resale Verification**: Correctly verifies models resold between providers.
 - **Automated Manifests**: Sigstore integration for Tinfoil.

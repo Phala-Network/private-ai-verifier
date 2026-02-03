@@ -33,6 +33,7 @@ class TeeVerifier:
             if not report.raw:
                 return VerificationResult(
                     model_verified=False,
+                    provider=provider_name,
                     timestamp=time.time(),
                     hardware_type=["INTEL_TDX"],  # fallback
                     claims={},
@@ -49,6 +50,7 @@ class TeeVerifier:
             if not report.raw:
                 return VerificationResult(
                     model_verified=False,
+                    provider=provider_name,
                     timestamp=time.time(),
                     hardware_type=["INTEL_TDX"],
                     claims={},
@@ -103,6 +105,7 @@ class TeeVerifier:
             if nvidia_result.model_verified:
                 return VerificationResult(
                     model_verified=True,
+                    provider=provider_name,
                     timestamp=time.time(),
                     hardware_type=["INTEL_TDX", "NVIDIA_CC"],
                     claims=combined_claims,
@@ -111,6 +114,7 @@ class TeeVerifier:
             else:
                 return VerificationResult(
                     model_verified=intel_result.model_verified,
+                    provider=provider_name,
                     timestamp=time.time(),
                     hardware_type=["INTEL_TDX", "NVIDIA_CC"],
                     claims=combined_claims,

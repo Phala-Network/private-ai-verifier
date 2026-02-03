@@ -7,6 +7,7 @@ from .base import Verifier
 from .dstack import DstackVerifier, verify_report_data
 from ..types import VerificationResult
 from .nvidia import NvidiaGpuVerifier
+from .intel import IntelTdxVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -241,6 +242,16 @@ class NearAICloudVerifier(Verifier):
         }
         if nvidia_claims:
             claims["nvidia"] = nvidia_claims
+
+        # 5. Optional: Intel Trust Authority appraisal for the main model quote
+        if model_attestations and "intel_quote" in model_attestations[0]:
+            try:
+                quote_bytes = bytes.fromhex(model_attestations[0]["intel_quote"])
+                ita_claims = await IntelTdxVerifier.verify_with_ita(quote_bytes)
+                if ita_claims:
+                    claims["intel_trust_authority"] = ita_claims
+            except Exception as e:
+                logger.warning(f"ITA appraisal failed in NearAICloudVerifier: {e}")
 
         return VerificationResult(
             model_verified=model_verified,

@@ -9,6 +9,7 @@ from ..types import VerificationResult
 from .base import Verifier
 from .dstack import DstackVerifier
 from .nvidia import NvidiaGpuVerifier
+from .intel import IntelTdxVerifier
 
 logger = logging.getLogger(__name__)
 
@@ -283,6 +284,16 @@ class PhalaCloudVerifier(Verifier):
             if gpu_result:
                 # We already cleaned up nvidia claims in its verifier
                 claims["nvidia"] = gpu_result.claims
+
+            # 6. Optional: Intel Trust Authority appraisal for the main model quote
+            if instance.get("quote"):
+                try:
+                    quote_bytes = bytes.fromhex(instance["quote"])
+                    ita_claims = await IntelTdxVerifier.verify_with_ita(quote_bytes)
+                    if ita_claims:
+                        claims["intel_trust_authority"] = ita_claims
+                except Exception as e:
+                    logger.warning(f"ITA appraisal failed in PhalaCloudVerifier: {e}")
 
             return VerificationResult(
                 model_verified=model_verified,

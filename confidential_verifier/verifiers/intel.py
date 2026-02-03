@@ -1,9 +1,19 @@
 import dcap_qvl
 import time
 import json
-from typing import Any, Dict
+import os
+import requests
+import base64
+import jwt
+from typing import Any, Dict, Optional
 from ..types import VerificationResult
 from .base import Verifier
+from dotenv import load_dotenv
+
+load_dotenv()
+
+ITA_API_KEY = os.getenv("INTEL_TRUST_AUTHORITY_API_KEY")
+ITA_URL = "https://api.trustauthority.intel.com/appraisal/v2/attest"
 
 
 class IntelTdxVerifier(Verifier):
@@ -31,6 +41,13 @@ class IntelTdxVerifier(Verifier):
                 res.model_id = model_id
             if repo:
                 res.claims["repo"] = repo
+
+            # Optional: Intel Trust Authority appraisal
+            if ITA_API_KEY:
+                ita_claims = await self.verify_with_ita(quote_bytes)
+                if ita_claims:
+                    res.claims["intel_trust_authority"] = ita_claims
+
             return res
         except Exception as e:
             # Best effort: manual parse for registers if verification fails
@@ -45,6 +62,12 @@ class IntelTdxVerifier(Verifier):
 
             # Ensure status is at least present
             claims["status"] = "Error"
+
+            # Optional: Intel Trust Authority appraisal even on local failure
+            if ITA_API_KEY:
+                ita_claims = await self.verify_with_ita(quote_bytes)
+                if ita_claims:
+                    claims["intel_trust_authority"] = ita_claims
 
             return VerificationResult(
                 model_verified=False,
@@ -86,6 +109,36 @@ class IntelTdxVerifier(Verifier):
             hardware_type=["INTEL_TDX"],
             claims=claims,
         )
+
+    @staticmethod
+    async def verify_with_ita(quote_bytes: bytes) -> Optional[Dict[str, Any]]:
+        """Appraise the quote using Intel Trust Authority API."""
+        if not ITA_API_KEY:
+            return None
+        try:
+            quote_base64 = base64.b64encode(quote_bytes).decode("utf-8")
+            headers = {
+                "Accept": "application/json",
+                "x-api-key": ITA_API_KEY,
+                "Content-Type": "application/json",
+            }
+            data = {"tdx": {"quote": quote_base64}}
+
+            response = requests.post(ITA_URL, headers=headers, json=data)
+            if response.status_code == 200:
+                token = response.json().get("token")
+                if token:
+                    # TODO: Fetch JWKS from Intel and enable signature verification for better security.
+                    # Currently trusting the secure HTTPS connection + API Key.
+                    return jwt.decode(
+                        token,
+                        options={"verify_signature": False},
+                        algorithms=["RS256", "ES256", "ES384", "PS256"],
+                    )
+            return None
+        except Exception:
+            # Silent failure for optional ITA verification
+            return None
 
     def _manual_parse_tdx(self, quote_bytes: bytes) -> Dict[str, Any]:
         """Manually extract TDX V4 fields from quote bytes."""

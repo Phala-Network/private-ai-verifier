@@ -83,6 +83,12 @@ class TinfoilTdxVerifier(IntelTdxVerifier):
                 + ", ".join(reasons)
             )
 
+        # 3. Optional: Intel Trust Authority appraisal (redundant but ensure it stays in claims)
+        if "intel_trust_authority" not in result.claims:
+            ita_claims = await self.verify_with_ita(quote_bytes)
+            if ita_claims:
+                result.claims["intel_trust_authority"] = ita_claims
+
         return result
 
     def _check_hardware_policy(self, claims: Dict[str, Any], reasons: List[str]):
