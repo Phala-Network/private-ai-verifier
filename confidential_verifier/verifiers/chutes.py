@@ -144,9 +144,8 @@ class ChutesVerifier(Verifier):
             )
         else:
             claims["e2e_binding_verified"] = True
-            # If we couldn't verify TDX online but anti-tamper passes, still mark TDX
-            if HARDWARE_INTEL_TDX not in hardware_type and not tdx_error:
-                hardware_type.append(HARDWARE_INTEL_TDX)
+            # Note: TDX hardware type is ONLY added when tdx_result.status == "UpToDate" (line 111)
+            # Anti-tamper alone does not prove TDX hardware
 
         # Step 4: Validate pre-fetched NVIDIA GPU tokens (offline)
         # Pass expected_report_data as the expected nonce for replay protection
