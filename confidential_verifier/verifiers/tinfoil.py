@@ -182,11 +182,21 @@ class TinfoilVerifier(Verifier):
         bundle = self._fetch_sigstore_bundle(repo)
         payload = self._extract_payload(bundle)
 
+        if not isinstance(payload, dict):
+            errors.append(f"Invalid payload format: expected dict, got {type(payload).__name__}")
+            return
+
         predicate_type = payload.get("predicateType", "")
 
         if "snp-tdx-multiplatform" in predicate_type:
-            snp = payload.get("predicate", {}).get("snp_measurement", {})
-            expected_measurement = snp.get("measurement")
+            snp = payload.get("predicate", {}).get("snp_measurement")
+            # snp_measurement can be either a string (direct measurement) or a dict with "measurement" key
+            if isinstance(snp, str):
+                expected_measurement = snp
+            elif isinstance(snp, dict):
+                expected_measurement = snp.get("measurement")
+            else:
+                expected_measurement = None
             actual_measurement = claims.get("measurement")
 
             if expected_measurement and actual_measurement:
@@ -197,7 +207,13 @@ class TinfoilVerifier(Verifier):
         elif "sev-snp-guest" in predicate_type:
             # Direct SNP predicate format
             snp = payload.get("predicate", {})
-            expected_measurement = snp.get("measurement")
+            # predicate can be a dict with "measurement" key or other format
+            if isinstance(snp, dict):
+                expected_measurement = snp.get("measurement")
+            elif isinstance(snp, str):
+                expected_measurement = snp
+            else:
+                expected_measurement = None
             actual_measurement = claims.get("measurement")
 
             if expected_measurement and actual_measurement:
@@ -237,9 +253,12 @@ class TinfoilVerifier(Verifier):
         try:
             payload_b64 = bundle.get("dsseEnvelope", {}).get("payload")
             if payload_b64:
-                return json.loads(base64.b64decode(payload_b64).decode("utf-8"))
-        except Exception:
-            pass
+                result = json.loads(base64.b64decode(payload_b64).decode("utf-8"))
+                if isinstance(result, dict):
+                    return result
+                logger.warning(f"Unexpected payload type: {type(result)}")
+        except Exception as e:
+            logger.warning(f"Failed to extract payload: {e}")
         return {}
 
 
@@ -431,7 +450,10 @@ class TinfoilTdxVerifier(IntelTdxVerifier):
         try:
             payload_b64 = bundle.get("dsseEnvelope", {}).get("payload")
             if payload_b64:
-                return json.loads(base64.b64decode(payload_b64).decode("utf-8"))
-        except:
-            pass
+                result = json.loads(base64.b64decode(payload_b64).decode("utf-8"))
+                if isinstance(result, dict):
+                    return result
+                print(f"Warning: Unexpected payload type: {type(result)}")
+        except Exception as e:
+            print(f"Warning: Failed to extract payload: {e}")
         return {}
