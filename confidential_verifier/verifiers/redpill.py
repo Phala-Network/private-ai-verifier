@@ -89,6 +89,7 @@ class RedpillVerifier(Verifier):
             if not model_id:
                 return VerificationResult(
                     model_verified=False,
+                    provider="redpill",
                     timestamp=time.time(),
                     hardware_type=[],
                     claims={},
@@ -99,6 +100,7 @@ class RedpillVerifier(Verifier):
             if not model_info:
                 return VerificationResult(
                     model_verified=False,
+                    provider="redpill",
                     timestamp=time.time(),
                     hardware_type=[],
                     claims={"model_id": model_id},
@@ -120,6 +122,7 @@ class RedpillVerifier(Verifier):
                 if not tinfoil_id:
                     return VerificationResult(
                         model_verified=False,
+                        provider="redpill",
                         timestamp=time.time(),
                         hardware_type=[],
                         claims={"model_id": model_id, "providers": providers},
@@ -267,6 +270,7 @@ class RedpillVerifier(Verifier):
             # Not verifiable
             return VerificationResult(
                 model_verified=False,
+                provider="redpill",
                 timestamp=time.time(),
                 hardware_type=[],
                 claims={"model_id": model_id, "providers": providers},
@@ -275,10 +279,29 @@ class RedpillVerifier(Verifier):
 
         except Exception as e:
             logger.exception("Redpill verification failed")
+            # Try to get model provider from model_info if available
+            model_provider = None
+            try:
+                model_id = report_data.get("model_id") or report_data.get("model")
+                if model_id:
+                    model_info = self._get_model_info(model_id)
+                    if model_info:
+                        providers = model_info.get("providers", [])
+                        if "phala" in providers or not providers:
+                            model_provider = "phala"
+                        elif "tinfoil" in providers:
+                            model_provider = "tinfoil"
+                        elif "near-ai" in providers:
+                            model_provider = "nearai"
+            except Exception:
+                pass
+
+            claims = {"model_provider": model_provider} if model_provider else {}
             return VerificationResult(
                 model_verified=False,
+                provider="redpill",
                 timestamp=time.time(),
                 hardware_type=[],
-                claims={},
+                claims=claims,
                 error=str(e),
             )

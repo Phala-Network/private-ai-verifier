@@ -146,6 +146,9 @@ class TeeVerifier:
                 "repo": report.raw.get("repo"),
                 "request_nonce": report.request_nonce,
                 "signing_address": report.raw.get("signing_address"),
+                # Tinfoil-specific fields for format detection
+                "quote_type": report.raw.get("quote_type"),
+                "format": report.raw.get("format"),
             }
 
         # 1. Verify Intel TDX Quote (Mandatory)
