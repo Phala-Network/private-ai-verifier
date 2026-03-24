@@ -53,11 +53,12 @@ class NvidiaGpuVerifier(Verifier):
 
             claims = {**platform_claims, **gpu_claims}
 
+            # Only claim hardware_type if verification succeeded
             return VerificationResult(
                 model_verified=is_valid,
                 provider="nvidia",
                 timestamp=time.time(),
-                hardware_type=[HARDWARE_NVIDIA_CC],
+                hardware_type=[HARDWARE_NVIDIA_CC] if is_valid else [],
                 claims=claims,
                 error=None if is_valid else "Nvidia attestation result is false",
             )

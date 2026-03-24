@@ -157,11 +157,14 @@ class TinfoilVerifier(Verifier):
         model_verified = len(errors) == 0
         error_msg = "; ".join(errors) if errors else None
 
+        # Only claim hardware_type if verification succeeded
+        hardware_type = [HARDWARE_AMD_SEV_SNP] if model_verified else []
+
         return VerificationResult(
             model_verified=model_verified,
             provider="tinfoil",
             timestamp=time.time(),
-            hardware_type=[HARDWARE_AMD_SEV_SNP],
+            hardware_type=hardware_type,
             model_id=raw_data.get("model_id"),
             claims=claims,
             error=error_msg,

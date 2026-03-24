@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 from typing import List, Optional
 from .types import AttestationReport, VerificationResult
 from .providers import TinfoilProvider, RedpillProvider, NearaiProvider, ChutesProvider
@@ -29,7 +30,8 @@ class TeeVerifier:
         provider = self.providers.get(provider_name.lower())
         if not provider:
             raise ValueError(f"Unknown provider: {provider_name}")
-        return provider.fetch_report(model_id)
+        # Run sync provider.fetch_report in thread pool to avoid blocking event loop
+        return await asyncio.to_thread(provider.fetch_report, model_id)
 
     async def verify(self, report: AttestationReport) -> VerificationResult:
         # Get provider from report

@@ -73,7 +73,7 @@ class IntelTdxVerifier(Verifier):
                 model_verified=False,
                 provider="intel",
                 timestamp=time.time(),
-                hardware_type=["INTEL_TDX"],
+                hardware_type=[],  # Don't claim hardware type on failure
                 model_id=model_id,
                 claims=claims,
                 error=f"Verification failed: {e}",
@@ -97,7 +97,7 @@ class IntelTdxVerifier(Verifier):
                 model_verified=False,
                 provider="intel",
                 timestamp=time.time(),
-                hardware_type=["INTEL_TDX"],
+                hardware_type=[],  # Don't claim hardware type on failure
                 claims=claims,
                 error=f"Verification failed with status: {result.status}",
             )

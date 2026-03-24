@@ -149,8 +149,9 @@ class ChutesVerifier(Verifier):
                 hardware_type.append(HARDWARE_INTEL_TDX)
 
         # Step 4: Validate pre-fetched NVIDIA GPU tokens (offline)
+        # Pass expected_report_data as the expected nonce for replay protection
         if gpu_tokens:
-            gpu_result = self._validate_gpu_tokens(gpu_tokens)
+            gpu_result = self._validate_gpu_tokens(gpu_tokens, expected_nonce=expected_report_data)
             claims["gpu"] = gpu_result
 
             if gpu_result.get("verified"):
@@ -182,12 +183,16 @@ class ChutesVerifier(Verifier):
         except Exception:
             return None
 
-    def _validate_gpu_tokens(self, gpu_tokens: Dict[str, Any]) -> Dict[str, Any]:
+    def _validate_gpu_tokens(self, gpu_tokens: Dict[str, Any], expected_nonce: Optional[str] = None) -> Dict[str, Any]:
         """
         Validate pre-fetched NVIDIA GPU tokens (offline).
 
         The tokens were fetched from NRAS during Provider.fetch_report().
-        Here we just decode and validate the JWT structure.
+        Here we decode and validate the JWT structure, including eat_nonce for replay protection.
+
+        Args:
+            gpu_tokens: Dict containing tokens and any fetch errors
+            expected_nonce: Expected eat_nonce value (anti-tamper hash) for replay protection
         """
         tokens = gpu_tokens.get("tokens")
         fetch_error = gpu_tokens.get("error")
@@ -215,6 +220,17 @@ class ChutesVerifier(Verifier):
 
             is_valid = platform_claims.get("x-nvidia-overall-att-result") is True
 
+            # Verify eat_nonce for replay protection (CRITICAL)
+            if expected_nonce:
+                actual_nonce = platform_claims.get("eat_nonce")
+                if not actual_nonce:
+                    return {"verified": False, "error": "Missing eat_nonce in NRAS token - cannot verify replay protection"}
+                if actual_nonce != expected_nonce:
+                    return {
+                        "verified": False,
+                        "error": f"eat_nonce mismatch: expected {expected_nonce[:16]}..., got {actual_nonce[:16] if actual_nonce else 'None'}..."
+                    }
+
             # Also decode GPU tokens if present
             gpu_claims = {}
             if len(tokens) > 1 and isinstance(tokens[1], dict):
@@ -233,6 +249,7 @@ class ChutesVerifier(Verifier):
                 "verified": is_valid,
                 "platform_claims": platform_claims,
                 "gpu_claims": gpu_claims,
+                "nonce_verified": expected_nonce is not None,
                 "error": None if is_valid else "NVIDIA attestation result is false",
             }
 
