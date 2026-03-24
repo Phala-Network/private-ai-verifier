@@ -102,6 +102,19 @@ class TeeVerifier:
                 instances_evidence, nonce, pubkeys
             )
 
+            # all([]) returns True, so we must check for empty results
+            if not results:
+                return VerificationResult(
+                    model_verified=False,
+                    provider=provider_name,
+                    timestamp=time.time(),
+                    hardware_type=[],
+                    model_id=report.model_id,
+                    request_nonce=nonce,
+                    claims={},
+                    error="No valid instances found to verify",
+                )
+
             all_verified = all(r.model_verified for r in results.values())
             combined_claims = {
                 "instances": {iid: r.claims for iid, r in results.items()},

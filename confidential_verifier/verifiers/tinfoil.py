@@ -139,6 +139,10 @@ class TinfoilVerifier(Verifier):
         if "parse_error" in snp_claims:
             errors.append(f"SNP report parsing failed: {snp_claims['parse_error']}")
 
+        # Repo is required for manifest comparison - without it we can't verify measurements
+        if not repo:
+            errors.append("Missing repo for manifest comparison - cannot verify measurements")
+
         # Check manifest if repo is provided and no parse errors
         if repo and "parse_error" not in snp_claims:
             try:
