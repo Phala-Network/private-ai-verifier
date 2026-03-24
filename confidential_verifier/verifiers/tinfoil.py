@@ -14,10 +14,16 @@ logger = logging.getLogger(__name__)
 # derived from https://github.com/tinfoilsh/verifier/blob/main/attestation/tdx.go
 
 # Accepted MR_SEAM values (TDX Module hash) for Tinfoil's environment
+# From https://github.com/tinfoilsh/verifier/blob/main/attestation/tdx.go
 ACCEPTED_MR_SEAMS = [
+    # TDX Module 1.5.08
     "49b66faa451d19ebbdbe89371b8daf2b65aa3984ec90110343e9e2eec116af08850fa20e3b1aa9a874d77a65380ee7e6",
-    # Newer TDX module version
+    # TDX Module 2.0.02
     "685f891ea5c20e8fa27b151bf34bf3b50fbaf7143cc53662727cbdb167c0ad8385f1f6f3571539a91e104a1c96d75e04",
+    # TDX Module 1.5.16
+    "7bf063280e94fb051f5dd7b1fc59ce9aac42bb961df8d44b709c9b0ff87a7b4df648657ba6d1189589feab1d5a3c9a9d",
+    # TDX Module 2.0.08
+    "476a2997c62bccc7837091dd58dc7c24c28ba26927f93e00e7e1997d68e3d5bb9a023c3ec0d7c0e5a29929fe5dd282ec",
 ]
 
 # Expected TdAttributes: Debug must be disabled (bit 1 off) among other flags
