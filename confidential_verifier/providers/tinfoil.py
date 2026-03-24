@@ -6,10 +6,21 @@ import os
 from typing import List, Dict, Any, Optional
 from .base import ServiceProvider
 from ..types import AttestationReport
-from ..verifiers import TinfoilTdxVerifier, Verifier
+from ..verifiers.tinfoil import TinfoilVerifier
+from ..verifiers import Verifier
 
 
 class TinfoilProvider(ServiceProvider):
+    """
+    Provider for Tinfoil attestation.
+
+    Tinfoil runs enclaves on both Intel TDX and AMD SEV-SNP hardware.
+    The provider tries the specific enclave endpoint first, then falls back
+    to the central router.
+    """
+
+    ROUTER_URL = "https://inference.tinfoil.sh"
+
     def __init__(self, config_path: Optional[str] = None):
         if not config_path:
             config_path = os.path.join(
@@ -22,9 +33,10 @@ class TinfoilProvider(ServiceProvider):
         self._cache = None
 
     def get_verifier(self) -> Verifier:
-        return TinfoilTdxVerifier()
+        return TinfoilVerifier()
 
-    def _get_model_map(self) -> Dict[str, str]:
+    def _get_model_config(self) -> Dict[str, Dict[str, Any]]:
+        """Load model configuration from YAML file."""
         if self._cache is not None:
             return self._cache
 
@@ -32,69 +44,86 @@ class TinfoilProvider(ServiceProvider):
             with open(self.config_path, "r") as f:
                 config = yaml.safe_load(f)
 
-            model_map = {}
-            models = config.get("models", {})
-            for name, data in models.items():
-                enclaves = data.get("enclaves", [])
-                if enclaves:
-                    model_map[name] = enclaves[0]
-
-            self._cache = model_map
-            return model_map
+            self._cache = config.get("models", {})
+            return self._cache
         except Exception as e:
             print(f"Failed to load Tinfoil config from {self.config_path}: {e}")
-            raise Exception("Failed to load Tinfoil configuration")
+            return {}
+
+    def _fetch_attestation(self, url: str) -> Dict[str, Any]:
+        """Fetch and parse attestation from a URL."""
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+        return response.json()
 
     def fetch_report(self, model_id: str) -> AttestationReport:
-        model_map = self._get_model_map()
-        host = model_map.get(model_id)
+        """
+        Fetch attestation report from Tinfoil.
 
-        if not host:
-            if "." in model_id:
-                host = model_id
-            else:
-                raise Exception(f"Unknown Tinfoil model: {model_id}")
+        Tries the specific enclave endpoint first, then falls back to the router.
+        Supports both Intel TDX and AMD SEV-SNP formats.
+        """
+        model_config = self._get_model_config()
+        repo = None
+        enclave_url = None
 
-        url = f"https://{host}/.well-known/tinfoil-attestation"
-        print(f"[Tinfoil] Fetching from {url}")
+        # Try to get enclave endpoint from config
+        if model_id in model_config:
+            repo = model_config[model_id].get("repo")
+            enclaves = model_config[model_id].get("enclaves", [])
+            if enclaves:
+                enclave_url = f"https://{enclaves[0]}/.well-known/tinfoil-attestation"
 
-        response = requests.get(url)
-        response.raise_for_status()
-        data = response.json()
+        data = None
 
-        expected_prefix = "https://tinfoil.sh/predicate/tdx-guest/"
+        # Try enclave endpoint first
+        if enclave_url:
+            try:
+                print(f"[Tinfoil] Trying enclave: {enclave_url}")
+                data = self._fetch_attestation(enclave_url)
+                print(f"[Tinfoil] Successfully fetched from enclave")
+            except Exception as e:
+                print(f"[Tinfoil] Enclave failed ({e}), falling back to router")
+
+        # Fall back to router
+        if data is None:
+            url = f"{self.ROUTER_URL}/.well-known/tinfoil-attestation"
+            print(f"[Tinfoil] Fetching from router: {url}")
+            data = self._fetch_attestation(url)
+
         fmt = data.get("format", "")
-        if not fmt.startswith(expected_prefix):
-            raise Exception(
-                f"Unsupported Tinfoil attestation format: {fmt or 'missing'}"
-            )
-
         body = data.get("body")
+
         if not body:
             raise Exception("Tinfoil response missing body")
 
+        # Decompress the quote
         compressed_quote = base64.b64decode(body)
         quote_bytes = gzip.decompress(compressed_quote)
 
-        # Get repo from config
-        repo = None
-        try:
-            with open(self.config_path, "r") as f:
-                config = yaml.safe_load(f)
-                repo = config.get("models", {}).get(model_id, {}).get("repo")
-        except:
-            pass
+        # Detect attestation format
+        if "sev-snp" in fmt:
+            quote_type = "sev-snp"
+            print(f"[Tinfoil] Detected AMD SEV-SNP attestation")
+        elif "tdx" in fmt:
+            quote_type = "tdx"
+            print(f"[Tinfoil] Detected Intel TDX attestation")
+        else:
+            quote_type = "unknown"
+            print(f"[Tinfoil] Unknown attestation format: {fmt}")
 
         data["repo"] = repo
         data["model_id"] = model_id
+        data["quote_type"] = quote_type
 
         return AttestationReport(
             provider="tinfoil",
             model_id=model_id,
-            intel_quote=quote_bytes.hex(),
+            intel_quote=quote_bytes.hex(),  # Field name kept for compatibility
             nvidia_payload=None,
             raw=data,
         )
 
     def list_models(self) -> List[str]:
-        return list(self._get_model_map().keys())
+        """List models from config file."""
+        return list(self._get_model_config().keys())

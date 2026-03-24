@@ -201,15 +201,27 @@ class ChutesProvider(ServiceProvider):
             import dcap_qvl
             import asyncio
             import json
+            from concurrent.futures import ThreadPoolExecutor
 
             quote_bytes = base64.b64decode(quote_b64)
             print(f"[Chutes] Verifying TDX quote with dcap_qvl...")
 
-            # Run async verification
-            loop = asyncio.get_event_loop()
-            verified_report = loop.run_until_complete(
-                dcap_qvl.get_collateral_and_verify(quote_bytes)
-            )
+            # Define sync wrapper that creates its own event loop
+            def run_verification():
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                try:
+                    return loop.run_until_complete(
+                        dcap_qvl.get_collateral_and_verify(quote_bytes)
+                    )
+                finally:
+                    loop.close()
+
+            # Run in a separate thread to avoid event loop conflicts
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(run_verification)
+                verified_report = future.result(timeout=30)
+
             result = json.loads(verified_report.to_json())
             print(f"[Chutes] TDX verification status: {result.get('status')}")
             return {"result": result, "error": None}

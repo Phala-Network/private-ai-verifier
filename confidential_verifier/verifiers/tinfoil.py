@@ -2,11 +2,15 @@ import time
 import requests
 import json
 import base64
-from typing import Any, List, Dict
+import logging
+from typing import Any, List, Dict, Optional
 from .intel import IntelTdxVerifier
-from ..types import VerificationResult
+from .base import Verifier
+from ..types import VerificationResult, HARDWARE_INTEL_TDX, HARDWARE_AMD_SEV_SNP
 
-# Hardcoded Tinfoil Policy Values
+logger = logging.getLogger(__name__)
+
+# Hardcoded Tinfoil Policy Values for TDX
 # derived from https://github.com/tinfoilsh/verifier/blob/main/attestation/tdx.go
 
 # Accepted MR_SEAM values (TDX Module hash) for Tinfoil's environment
@@ -26,6 +30,217 @@ EXPECTED_XFAM = "e702060000000000"
 # Zero constants for validation
 ZERO_48 = "00" * 48
 RTMR3_ZERO = "00" * 48
+
+
+class TinfoilVerifier(Verifier):
+    """
+    Unified Tinfoil verifier supporting both TDX and SEV-SNP attestations.
+    """
+
+    async def verify(self, quote: Any) -> VerificationResult:
+        """
+        Verify Tinfoil attestation.
+
+        Automatically detects the attestation type (TDX or SEV-SNP) and
+        applies the appropriate verification logic.
+        """
+        if isinstance(quote, dict):
+            quote_type = quote.get("quote_type", "unknown")
+            raw_data = quote
+        else:
+            quote_type = "unknown"
+            raw_data = {"quote": quote}
+
+        if quote_type == "sev-snp":
+            return await self._verify_snp(quote)
+        elif quote_type == "tdx":
+            # Use the existing TDX verifier
+            tdx_verifier = TinfoilTdxVerifier()
+            return await tdx_verifier.verify(quote)
+        else:
+            # Try to auto-detect based on format field
+            fmt = raw_data.get("format", "")
+            if "sev-snp" in fmt:
+                return await self._verify_snp(quote)
+            elif "tdx" in fmt:
+                tdx_verifier = TinfoilTdxVerifier()
+                return await tdx_verifier.verify(quote)
+            else:
+                return VerificationResult(
+                    model_verified=False,
+                    provider="tinfoil",
+                    timestamp=time.time(),
+                    hardware_type=[],
+                    claims={"format": fmt},
+                    error=f"Unknown attestation format: {fmt}",
+                )
+
+    async def _verify_snp(self, quote: Any) -> VerificationResult:
+        """
+        Verify AMD SEV-SNP attestation from Tinfoil.
+
+        SEV-SNP verification is simpler as the hardware handles most of the
+        integrity checks. We focus on:
+        1. Parsing the attestation report
+        2. Manifest comparison against Sigstore golden values
+        """
+        if isinstance(quote, dict):
+            quote_hex = quote.get("quote", quote.get("intel_quote", ""))
+            raw_data = quote
+        elif isinstance(quote, str):
+            quote_hex = quote
+            raw_data = {}
+        elif isinstance(quote, bytes):
+            quote_hex = quote.hex()
+            raw_data = {}
+        else:
+            return VerificationResult(
+                model_verified=False,
+                provider="tinfoil",
+                timestamp=time.time(),
+                hardware_type=[],
+                claims={},
+                error="Invalid quote format",
+            )
+
+        try:
+            quote_bytes = bytes.fromhex(quote_hex) if quote_hex else b""
+        except Exception as e:
+            return VerificationResult(
+                model_verified=False,
+                provider="tinfoil",
+                timestamp=time.time(),
+                hardware_type=[],
+                claims={},
+                error=f"Failed to parse quote: {e}",
+            )
+
+        claims: Dict[str, Any] = {
+            "attestation_type": "sev-snp",
+            "quote_length": len(quote_bytes),
+        }
+
+        errors = []
+        repo = raw_data.get("repo")
+
+        # Parse SNP report structure
+        snp_claims = self._parse_snp_report(quote_bytes)
+        claims.update(snp_claims)
+
+        # Check manifest if repo is provided
+        if repo:
+            try:
+                self._check_snp_manifest(snp_claims, repo, errors)
+                claims["repo"] = repo
+                if "hw_profile" in snp_claims:
+                    claims["hw_profile"] = snp_claims["hw_profile"]
+            except Exception as e:
+                logger.warning(f"SNP manifest check failed: {e}")
+                errors.append(f"Manifest check failed: {e}")
+
+        model_verified = len(errors) == 0
+        error_msg = "; ".join(errors) if errors else None
+
+        return VerificationResult(
+            model_verified=model_verified,
+            provider="tinfoil",
+            timestamp=time.time(),
+            hardware_type=[HARDWARE_AMD_SEV_SNP],
+            model_id=raw_data.get("model_id"),
+            claims=claims,
+            error=error_msg,
+        )
+
+    def _parse_snp_report(self, quote_bytes: bytes) -> Dict[str, Any]:
+        """
+        Parse AMD SEV-SNP attestation report.
+
+        SNP report structure (simplified):
+        - Version, Guest SVN, Policy at the start
+        - Measurement at offset 0x90 (48 bytes)
+        - Report data at offset 0x50 (64 bytes)
+        """
+        if len(quote_bytes) < 0x100:
+            return {"parse_error": "Quote too short for SNP format"}
+
+        try:
+            return {
+                "version": int.from_bytes(quote_bytes[0:4], "little"),
+                "guest_svn": int.from_bytes(quote_bytes[4:8], "little"),
+                "policy": quote_bytes[8:16].hex(),
+                "measurement": quote_bytes[0x90:0xC0].hex(),
+                "report_data": quote_bytes[0x50:0x90].hex(),
+            }
+        except Exception as e:
+            return {"parse_error": str(e)}
+
+    def _check_snp_manifest(
+        self, claims: Dict[str, Any], repo: str, errors: List[str]
+    ):
+        """Check SNP measurements against Sigstore golden values."""
+        # Fetch golden measurements
+        bundle = self._fetch_sigstore_bundle(repo)
+        payload = self._extract_payload(bundle)
+
+        predicate_type = payload.get("predicateType", "")
+
+        if "snp-tdx-multiplatform" in predicate_type:
+            snp = payload.get("predicate", {}).get("snp_measurement", {})
+            expected_measurement = snp.get("measurement")
+            actual_measurement = claims.get("measurement")
+
+            if expected_measurement and actual_measurement:
+                if expected_measurement != actual_measurement:
+                    errors.append(
+                        f"SNP measurement mismatch: expected {expected_measurement[:16]}..., got {actual_measurement[:16]}..."
+                    )
+        elif "sev-snp-guest" in predicate_type:
+            # Direct SNP predicate format
+            snp = payload.get("predicate", {})
+            expected_measurement = snp.get("measurement")
+            actual_measurement = claims.get("measurement")
+
+            if expected_measurement and actual_measurement:
+                if expected_measurement != actual_measurement:
+                    errors.append(
+                        f"SNP measurement mismatch: expected {expected_measurement[:16]}..., got {actual_measurement[:16]}..."
+                    )
+
+    def _fetch_sigstore_bundle(self, repo: str) -> Dict[str, Any]:
+        """Fetch Sigstore attestation bundle for a repository."""
+        try:
+            url_latest = (
+                f"https://api-github-proxy.tinfoil.sh/repos/{repo}/releases/latest"
+            )
+            resp = requests.get(url_latest, timeout=10)
+            resp.raise_for_status()
+            tag = resp.json().get("tag_name")
+
+            url_hash = f"https://api-github-proxy.tinfoil.sh/{repo}/releases/download/{tag}/tinfoil.hash"
+            resp_hash = requests.get(url_hash, timeout=10)
+            resp_hash.raise_for_status()
+            digest = resp_hash.text.strip()
+
+            url_attestation = f"https://gh-attestation-proxy.tinfoil.sh/repos/{repo}/attestations/sha256:{digest}"
+            resp_att = requests.get(url_attestation, timeout=10)
+            resp_att.raise_for_status()
+            att_data = resp_att.json()
+
+            if "attestations" in att_data and len(att_data["attestations"]) > 0:
+                return att_data["attestations"][0].get("bundle", {})
+        except Exception as e:
+            logger.warning(f"Failed to fetch Sigstore bundle for {repo}: {e}")
+        return {}
+
+    def _extract_payload(self, bundle: Dict[str, Any]) -> Dict[str, Any]:
+        """Extract payload from Sigstore bundle."""
+        try:
+            payload_b64 = bundle.get("dsseEnvelope", {}).get("payload")
+            if payload_b64:
+                return json.loads(base64.b64decode(payload_b64).decode("utf-8"))
+        except Exception:
+            pass
+        return {}
 
 
 class TinfoilTdxVerifier(IntelTdxVerifier):

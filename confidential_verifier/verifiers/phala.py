@@ -308,6 +308,7 @@ class PhalaCloudVerifier(Verifier):
             logger.exception("Phala Cloud verification failed")
             return VerificationResult(
                 model_verified=False,
+                provider="phala",
                 timestamp=time.time(),
                 hardware_type=[],
                 claims={},
