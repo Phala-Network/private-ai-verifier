@@ -135,8 +135,12 @@ class TinfoilVerifier(Verifier):
         snp_claims = self._parse_snp_report(quote_bytes)
         claims.update(snp_claims)
 
-        # Check manifest if repo is provided
-        if repo:
+        # Check for parse errors - if parsing failed, verification must fail
+        if "parse_error" in snp_claims:
+            errors.append(f"SNP report parsing failed: {snp_claims['parse_error']}")
+
+        # Check manifest if repo is provided and no parse errors
+        if repo and "parse_error" not in snp_claims:
             try:
                 self._check_snp_manifest(snp_claims, repo, errors)
                 claims["repo"] = repo
@@ -196,6 +200,10 @@ class TinfoilVerifier(Verifier):
 
         predicate_type = payload.get("predicateType", "")
 
+        if not predicate_type:
+            errors.append("Failed to fetch or parse Sigstore golden values")
+            return
+
         if "snp-tdx-multiplatform" in predicate_type:
             snp = payload.get("predicate", {}).get("snp_measurement")
             # snp_measurement can be either a string (direct measurement) or a dict with "measurement" key
@@ -207,11 +215,14 @@ class TinfoilVerifier(Verifier):
                 expected_measurement = None
             actual_measurement = claims.get("measurement")
 
-            if expected_measurement and actual_measurement:
-                if expected_measurement != actual_measurement:
-                    errors.append(
-                        f"SNP measurement mismatch: expected {expected_measurement[:16]}..., got {actual_measurement[:16]}..."
-                    )
+            if not expected_measurement:
+                errors.append("Golden SNP measurement not found in Sigstore bundle")
+            elif not actual_measurement:
+                errors.append("Actual SNP measurement missing from attestation")
+            elif expected_measurement != actual_measurement:
+                errors.append(
+                    f"SNP measurement mismatch: expected {expected_measurement[:16]}..., got {actual_measurement[:16]}..."
+                )
         elif "sev-snp-guest" in predicate_type:
             # Direct SNP predicate format
             snp = payload.get("predicate", {})
@@ -224,11 +235,16 @@ class TinfoilVerifier(Verifier):
                 expected_measurement = None
             actual_measurement = claims.get("measurement")
 
-            if expected_measurement and actual_measurement:
-                if expected_measurement != actual_measurement:
-                    errors.append(
-                        f"SNP measurement mismatch: expected {expected_measurement[:16]}..., got {actual_measurement[:16]}..."
-                    )
+            if not expected_measurement:
+                errors.append("Golden SNP measurement not found in Sigstore bundle")
+            elif not actual_measurement:
+                errors.append("Actual SNP measurement missing from attestation")
+            elif expected_measurement != actual_measurement:
+                errors.append(
+                    f"SNP measurement mismatch: expected {expected_measurement[:16]}..., got {actual_measurement[:16]}..."
+                )
+        else:
+            errors.append(f"Unknown Sigstore predicate type: {predicate_type}")
 
     def _fetch_sigstore_bundle(self, repo: str) -> Dict[str, Any]:
         """Fetch Sigstore attestation bundle for a repository."""
@@ -289,7 +305,14 @@ class TinfoilTdxVerifier(IntelTdxVerifier):
                 bytes.fromhex(quote_hex) if isinstance(quote_hex, str) else quote_hex
             )
         else:
-            raise ValueError("Quote must be hex string, bytes, or dict")
+            return VerificationResult(
+                model_verified=False,
+                provider="tinfoil",
+                timestamp=time.time(),
+                hardware_type=[],
+                claims={},
+                error="Quote must be hex string, bytes, or dict",
+            )
 
         internal_claims = self._manual_parse_tdx(quote_bytes)
 
@@ -361,6 +384,10 @@ class TinfoilTdxVerifier(IntelTdxVerifier):
         # 1. Fetch Image measurements (RTMR1, RTMR2)
         golden_image = self._fetch_golden_measurements(repo)
 
+        if not golden_image or not golden_image.get("rtmr1"):
+            reasons.append(f"Failed to fetch golden measurements for {repo}")
+            return
+
         actual_rtmr1 = claims.get("rt_mr1")
         actual_rtmr2 = claims.get("rt_mr2")
 
@@ -391,8 +418,10 @@ class TinfoilTdxVerifier(IntelTdxVerifier):
                 break
 
         if not found_profile:
+            mrtd_str = actual_mrtd[:8] if actual_mrtd else "None"
+            rtmr0_str = actual_rtmr0[:8] if actual_rtmr0 else "None"
             reasons.append(
-                f"No matching hardware profile found for MRTD={actual_mrtd[:8]}... RTMR0={actual_rtmr0[:8]}..."
+                f"No matching hardware profile found for MRTD={mrtd_str}... RTMR0={rtmr0_str}..."
             )
 
     def _fetch_golden_measurements(self, repo: str) -> Dict[str, str]:
