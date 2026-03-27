@@ -6,7 +6,7 @@ import os
 from typing import List, Dict, Any, Optional
 from .base import ServiceProvider
 from ..types import AttestationReport
-from ..verifiers.tinfoil import TinfoilVerifier
+from ..verifiers.tinfoil import TinfoilSevVerifier
 from ..verifiers import Verifier
 
 
@@ -34,7 +34,7 @@ class TinfoilProvider(ServiceProvider):
         self._cache = None
 
     def get_verifier(self) -> Verifier:
-        return TinfoilVerifier()
+        return TinfoilSevVerifier()
 
     def _get_model_config(self) -> Dict[str, Dict[str, Any]]:
         """Load model configuration from YAML file."""

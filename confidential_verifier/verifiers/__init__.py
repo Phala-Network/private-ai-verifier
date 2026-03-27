@@ -1,6 +1,6 @@
 from .intel import IntelTdxVerifier
 from .nvidia import NvidiaGpuVerifier
-from .tinfoil import TinfoilTdxVerifier, TinfoilVerifier
+from .tinfoil import TinfoilTdxVerifier, TinfoilSevVerifier
 from .base import Verifier
 from .dstack import DstackVerifier, verify_report_data
 from .redpill import RedpillVerifier
@@ -13,8 +13,8 @@ from .chutes import ChutesVerifier
 # - DstackVerifier: Dstack TEE verification via external service
 
 # User-facing verifiers (what users should call)
-# - TinfoilVerifier: Unified verifier for TDX + SEV-SNP with Sigstore manifest
-# - TinfoilTdxVerifier: Legacy TDX verifier (use TinfoilVerifier instead)
+# - TinfoilSevVerifier: Unified verifier for TDX + SEV-SNP with Sigstore manifest
+# - TinfoilTdxVerifier: Legacy TDX verifier (use TinfoilSevVerifier instead)
 # - RedpillVerifier: Full Phala app verification for Redpill models
 # - NearAICloudVerifier: Multi-component (Gateway + Models) verification
 # - ChutesVerifier: Intel TDX + NVIDIA CC with E2E public key binding
@@ -23,7 +23,7 @@ __all__ = [
     "Verifier",
     "IntelTdxVerifier",
     "NvidiaGpuVerifier",
-    "TinfoilVerifier",
+    "TinfoilSevVerifier",
     "TinfoilTdxVerifier",
     "DstackVerifier",
     "RedpillVerifier",

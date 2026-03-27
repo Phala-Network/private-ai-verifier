@@ -38,7 +38,7 @@ ZERO_48 = "00" * 48
 RTMR3_ZERO = "00" * 48
 
 
-class TinfoilVerifier(Verifier):
+class TinfoilSevVerifier(Verifier):
     """
     Unified Tinfoil verifier supporting both TDX and SEV-SNP attestations.
     """
